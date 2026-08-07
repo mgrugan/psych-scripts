@@ -1,0 +1,7 @@
+node_modules
+dist
+.jobs
+.DS_Store
+*.local
+.Rhistory
+.RData
