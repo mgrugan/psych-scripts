@@ -49,29 +49,12 @@ const App: React.FC = () => {
       />
 
       <div className="relative z-10 flex h-screen flex-col">
-        <header className="mx-auto flex w-full max-w-6xl shrink-0 items-center justify-between px-6 py-6 sm:px-10">
+        <header className="mx-auto flex w-full max-w-6xl shrink-0 items-center px-6 py-6 sm:px-10">
           <svg viewBox="0 0 32 32" className="h-5 w-5 text-white/80" aria-hidden="true">
             <circle cx="16" cy="16" r="3" fill="currentColor" opacity="0.9" />
             <circle cx="16" cy="16" r="9.5" fill="none" stroke="currentColor" strokeWidth="0.6" opacity="0.55" />
             <circle cx="16" cy="16" r="14.5" fill="none" stroke="currentColor" strokeWidth="0.5" opacity="0.25" />
           </svg>
-
-          <div className="flex items-center gap-2.5">
-            <span
-              className="h-1.5 w-1.5 rounded-full transition-colors duration-500"
-              style={{
-                background:
-                  engine === null
-                    ? 'rgba(255,255,255,0.28)'
-                    : engine.available
-                      ? '#ffd27a'
-                      : '#ff5a2b',
-              }}
-            />
-            <span className="text-[10px] font-light tracking-[0.28em] text-white/75 uppercase">
-              {engine === null ? 'checking' : engine.available ? 'engine ready' : 'engine offline'}
-            </span>
-          </div>
         </header>
 
         <main className="mx-auto w-full max-w-6xl min-h-0 flex-1 px-6 sm:px-10">
