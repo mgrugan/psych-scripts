@@ -69,7 +69,7 @@ const UploadPanel: React.FC<UploadPanelProps> = ({ busy, onRun }) => {
         className={`group relative cursor-pointer rounded-[22px] border border-dashed px-8 py-10 text-center transition-all duration-500 ${
           dragging
             ? 'border-[rgba(255,210,122,0.55)] bg-[rgba(255,210,122,0.05)]'
-            : 'border-white/12 hover:border-white/25 hover:bg-white/[0.015]'
+            : 'border-white/30 hover:border-white/55 hover:bg-white/[0.03]'
         } ${busy ? 'pointer-events-none opacity-60' : ''}`}
       >
         <input
@@ -80,7 +80,7 @@ const UploadPanel: React.FC<UploadPanelProps> = ({ busy, onRun }) => {
           onChange={(e) => accept(e.target.files?.[0])}
         />
 
-        <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-full border border-white/12 transition-transform duration-700 group-hover:scale-110">
+        <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-full border border-white/35 transition-transform duration-700 group-hover:scale-110">
           <svg
             viewBox="0 0 24 24"
             fill="none"
@@ -131,7 +131,7 @@ const UploadPanel: React.FC<UploadPanelProps> = ({ busy, onRun }) => {
             <p className="mb-2.5 text-[10px] font-medium tracking-widest-xl text-white/70 uppercase">
               Layout
             </p>
-            <div className="inline-flex rounded-full border border-white/10 bg-white/[0.02] p-1">
+            <div className="inline-flex rounded-full border border-white/25 bg-white/[0.04] p-1">
               {MODES.map((m) => (
                 <button
                   key={m.id}
@@ -158,7 +158,7 @@ const UploadPanel: React.FC<UploadPanelProps> = ({ busy, onRun }) => {
             <p className="mb-2.5 text-[10px] font-medium tracking-widest-xl text-white/70 uppercase">
               Top regions
             </p>
-            <div className="inline-flex items-center gap-5 rounded-full border border-white/10 bg-white/[0.02] px-5 py-1.5">
+            <div className="inline-flex items-center gap-5 rounded-full border border-white/25 bg-white/[0.04] px-5 py-1.5">
               <button
                 type="button"
                 disabled={busy || topN <= 1}
@@ -199,7 +199,7 @@ const UploadPanel: React.FC<UploadPanelProps> = ({ busy, onRun }) => {
           className={`relative mt-6 w-full overflow-hidden rounded-full py-3.5 text-[12px] tracking-widest uppercase transition-all duration-500 ${
             ready && !ageBlocked
               ? 'bg-white font-semibold text-black hover:bg-[#ffe9c2]'
-              : 'cursor-not-allowed border border-white/15 bg-white/[0.02] font-light text-white/60'
+              : 'cursor-not-allowed border border-white/25 bg-white/[0.04] font-light text-white/60'
           }`}
         >
           {busy ? 'Running the pipeline' : 'Run analysis'}

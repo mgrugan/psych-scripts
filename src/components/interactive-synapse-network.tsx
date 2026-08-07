@@ -137,7 +137,7 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
   nodeCount = 130,
   connectionRadius = 190,
   maxSynapses = 4,
-  hoverRadius = 130,
+  hoverRadius = 105,
   trailOpacity = 0.24,
   intensity = 0.7,
   ariaLabel = 'Interactive neuron network',
@@ -289,7 +289,7 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
         if (this.refractory > 0) this.refractory--
 
         // Hovering the neuron is what fires it.
-        if (this.excite > 0.55 && this.refractory <= 0) {
+        if (this.excite > 0.78 && this.refractory <= 0) {
           fire(this, 1)
         }
 
@@ -376,7 +376,7 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
     const edges: Edge[] = []
     const brainEdges: Edge[] = []
     const spikes: Spike[] = []
-    const MAX_SPIKES = 340
+    const MAX_SPIKES = 90
 
     const control = (e: Edge) => {
       const dx = e.b.px - e.a.px
@@ -397,7 +397,7 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
 
     function fire(n: Neuron, energy: number) {
       n.flash = Math.max(n.flash, energy)
-      n.refractory = 48 + Math.floor(Math.random() * 34)
+      n.refractory = 110 + Math.floor(Math.random() * 70)
       if (energy < 0.16) return
 
       // Part way through a morph the two layouts disagree about where every
@@ -412,7 +412,7 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
 
       for (const ei of list) {
         if (spikes.length >= MAX_SPIKES) break
-        if (Math.random() > 0.82) continue
+        if (Math.random() > 0.4) continue
         const e = pool[ei]
         if (!e) continue
         const forward = e.a === n
@@ -424,7 +424,7 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
           forward,
           t: 0,
           speed: (0.012 + Math.random() * 0.012) * (calm ? 0.6 : 1),
-          energy: energy * (0.72 + Math.random() * 0.14),
+          energy: energy * (0.58 + Math.random() * 0.12),
         })
       }
     }
@@ -652,7 +652,7 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
         if (s.t >= 1) {
           const target = s.forward ? e.b : e.a
           spikes.splice(i, 1)
-          if (target.refractory <= 0) fire(target, s.energy * 0.78)
+          if (target.refractory <= 0) fire(target, s.energy * 0.66)
           else target.flash = Math.max(target.flash, s.energy * 0.4)
         }
       }
