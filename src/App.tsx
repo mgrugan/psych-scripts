@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import InteractiveSynapseNetwork from './components/interactive-synapse-network'
 import UploadPanel from './components/UploadPanel'
 import ResultsPanel from './components/ResultsPanel'
+import LoadingDots from './components/LoadingDots'
 import { analyze, checkEngine, type AnalysisResult, type EngineHealth } from './lib/api'
 import type { Mode } from './lib/csv'
 
@@ -23,7 +24,6 @@ const App: React.FC = () => {
     try {
       const res = await analyze(file, mode, topN, setPhase)
       setResult(res)
-      window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'the analysis failed')
     } finally {
@@ -33,30 +33,28 @@ const App: React.FC = () => {
 
   return (
     <>
-      <InteractiveSynapseNetwork />
+      {/* The network gathers into a spinning brain while R is working. */}
+      <InteractiveSynapseNetwork phase={busy ? 'brain' : 'field'} />
 
-      {/* keeps the type legible over the brightest part of the network */}
+      {/* keeps the type legible, and lifts out of the way of the brain */}
       <div
         aria-hidden="true"
-        className="pointer-events-none fixed inset-0 z-[1]"
+        className={`pointer-events-none fixed inset-0 z-[1] transition-opacity duration-[1200ms] ${
+          busy ? 'opacity-30' : 'opacity-100'
+        }`}
         style={{
           background:
             'radial-gradient(120% 75% at 50% 0%, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.45) 45%, rgba(0,0,0,0.8) 100%)',
         }}
       />
 
-      <div className="relative z-10 min-h-screen">
-        <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-8 sm:px-10">
-          <div className="flex items-center gap-4">
-            <svg viewBox="0 0 32 32" className="h-6 w-6 text-white/70" aria-hidden="true">
-              <circle cx="16" cy="16" r="3" fill="currentColor" opacity="0.9" />
-              <circle cx="16" cy="16" r="9.5" fill="none" stroke="currentColor" strokeWidth="0.6" opacity="0.55" />
-              <circle cx="16" cy="16" r="14.5" fill="none" stroke="currentColor" strokeWidth="0.5" opacity="0.25" />
-            </svg>
-            <span className="font-display text-[12px] font-medium tracking-widest-xl text-white/75 uppercase">
-              FNSW
-            </span>
-          </div>
+      <div className="relative z-10 flex h-screen flex-col">
+        <header className="mx-auto flex w-full max-w-6xl shrink-0 items-center justify-between px-6 py-6 sm:px-10">
+          <svg viewBox="0 0 32 32" className="h-5 w-5 text-white/55" aria-hidden="true">
+            <circle cx="16" cy="16" r="3" fill="currentColor" opacity="0.9" />
+            <circle cx="16" cy="16" r="9.5" fill="none" stroke="currentColor" strokeWidth="0.6" opacity="0.55" />
+            <circle cx="16" cy="16" r="14.5" fill="none" stroke="currentColor" strokeWidth="0.5" opacity="0.25" />
+          </svg>
 
           <div className="flex items-center gap-2.5">
             <span
@@ -76,71 +74,63 @@ const App: React.FC = () => {
           </div>
         </header>
 
-        <main className="mx-auto max-w-6xl px-6 pb-28 sm:px-10">
-          {/* Once there are plots to look at, the hero steps out of the way. */}
-          <section
-            className={`rise transition-all duration-700 ${
-              result ? 'pt-10 pb-10' : 'pt-12 pb-12 sm:pt-16 sm:pb-16'
-            }`}
-          >
-            <p className="text-[10px] font-medium tracking-widest-xl text-white/30 uppercase">
-              AAL region atlas
-            </p>
-            <h1
-              className={`font-display mt-6 max-w-3xl leading-[0.95] font-extralight tracking-[-0.035em] text-white ${
-                result
-                  ? 'text-[clamp(1.7rem,3.4vw,2.4rem)]'
-                  : 'text-[clamp(2.6rem,6.4vw,4.6rem)]'
-              }`}
-            >
-              Where the{result ? ' ' : <br />}
-              <span className="font-light text-white/55">signal splits.</span>
-            </h1>
-            {!result && (
-              <p className="mt-8 max-w-xl text-[14px] leading-[1.85] font-extralight tracking-wide text-white/45">
-                Upload a sheet of AAL ROI values. The pipeline ranks every region by its
-                standardized difference between groups, then returns a plot for each condition,
-                ready to download.
+        <main className="mx-auto w-full max-w-6xl min-h-0 flex-1 px-6 sm:px-10">
+          {busy ? (
+            <div className="flex h-full items-end justify-center pb-16">
+              <p className="font-display text-[12px] font-extralight tracking-[0.4em] text-white/60 uppercase">
+                <LoadingDots
+                  label={phase === 'queued' ? 'Waiting for the engine' : 'Drawing your conditions'}
+                />
               </p>
-            )}
-          </section>
-
-          {result ? (
+            </div>
+          ) : result ? (
             <ResultsPanel result={result} onReset={() => setResult(null)} />
           ) : (
-            <div className="max-w-2xl">
-              <UploadPanel busy={busy} onRun={run} />
-
-              {busy && (
-                <p className="mt-7 text-center text-[11px] font-extralight tracking-[0.24em] text-white/35 uppercase">
-                  {phase === 'queued' ? 'Waiting for the engine' : 'R is drawing your conditions'}
+            <div className="grid h-full content-start items-center gap-10 overflow-y-auto py-2 lg:grid-cols-[1fr_minmax(0,440px)] lg:content-center lg:gap-14 lg:overflow-hidden lg:py-0">
+              <section className="rise pt-6 lg:pt-0">
+                <p className="text-[10px] font-medium tracking-widest-xl text-white/30 uppercase">
+                  AAL region atlas
                 </p>
-              )}
-
-              {error && (
-                <div className="glass-soft mt-7 rounded-2xl px-7 py-5">
-                  <p className="text-[10px] font-medium tracking-widest-xl text-[#ff8a5c] uppercase">
-                    Stopped
-                  </p>
-                  <p className="mt-3 text-[13px] leading-relaxed font-extralight text-white/60">
-                    {error}
-                  </p>
-                </div>
-              )}
-
-              {engine && !engine.available && !busy && (
-                <p className="mt-7 text-[11px] leading-relaxed font-extralight text-white/30">
-                  R is not reachable yet. Install R with tidyverse, cowplot and scales, then
-                  start the api with npm run dev.
+                <h1 className="font-display mt-5 text-[clamp(2.2rem,5vw,3.9rem)] leading-[0.98] font-extralight tracking-[-0.035em] text-white">
+                  Where the
+                  <br />
+                  <span className="font-light text-white/55">signal splits.</span>
+                </h1>
+                <p className="mt-6 max-w-md text-[13px] leading-[1.8] font-extralight tracking-wide text-white/45">
+                  Upload a sheet of AAL ROI values. The pipeline ranks every region by its
+                  standardized difference between groups, then returns a plot for each
+                  condition, ready to download.
                 </p>
-              )}
+
+                {error && (
+                  <div className="glass-soft mt-7 max-w-md rounded-2xl px-6 py-4">
+                    <p className="text-[10px] font-medium tracking-widest-xl text-[#ff8a5c] uppercase">
+                      Stopped
+                    </p>
+                    <p className="mt-2 text-[12px] leading-relaxed font-extralight text-white/60">
+                      {error}
+                    </p>
+                  </div>
+                )}
+
+                {engine && !engine.available && (
+                  <p className="mt-6 max-w-md text-[11px] leading-relaxed font-extralight text-white/30">
+                    R is not reachable yet. Install R with tidyverse, cowplot and scales, then
+                    start the api.
+                  </p>
+                )}
+              </section>
+
+              <div className="pb-6 lg:pb-0">
+                <UploadPanel busy={busy} onRun={run} />
+              </div>
             </div>
           )}
         </main>
 
-        <footer className="mx-auto max-w-6xl px-6 pb-12 sm:px-10">
+        <footer className="mx-auto w-full max-w-6xl shrink-0 px-6 pb-5 sm:px-10">
           <div className="hairline h-px" />
-          <p className="mt-6 text-[10px] font-extralight tracking-[0.28em] text-white/20 uppercase">
+          <p className="mt-4 text-[10px] font-extralight tracking-[0.28em] text-white/20 uppercase">
             Face · Number · Geometry · Word
           </p>
         </footer>

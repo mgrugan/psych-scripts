@@ -1,8 +1,16 @@
 import React, { useRef, useEffect, type ReactNode } from 'react'
 
+export type NetworkPhase = 'field' | 'brain'
+
 export interface InteractiveSynapseNetworkProps {
   /** Content to render on top of the network canvas */
   children?: ReactNode
+  /**
+   * 'field' scatters the neurons across the viewport and lets the cursor fire
+   * them. 'brain' gathers them into a slowly spinning brain. Switching between
+   * the two is animated in both directions.
+   */
+  phase?: NetworkPhase
   /** Resting colour of a neuron soma (rgb triplet, alpha is driven by state) */
   nodeColor?: string
   /** Colour of a signal at full strength */
@@ -55,12 +63,78 @@ function rgba(c: RGB, a: number) {
   return `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`
 }
 
+const easeInOut = (t: number) =>
+  t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+
+/** Evenly spread point on a unit sphere, by golden angle spiral. */
+function spherePoint(i: number, n: number): [number, number, number] {
+  const uy = 1 - 2 * ((i + 0.5) / n)
+  const r = Math.sqrt(Math.max(0, 1 - uy * uy))
+  const theta = i * 2.399963229728653
+  return [r * Math.cos(theta), uy, r * Math.sin(theta)]
+}
+
+/**
+ * A point on a brain-shaped shell.
+ *
+ * The last slice of the points form the cerebellum, a separate lobe tucked
+ * under the back. The rest are the cerebrum: an ellipsoid longer front to back
+ * than it is tall, tapered at both poles, flattened underneath, and parted down
+ * the middle by a fissure that only opens along the top.
+ */
+function brainPoint(i: number, n: number): [number, number, number] {
+  const cerebellumFrom = Math.floor(n * 0.84)
+
+  if (i >= cerebellumFrom) {
+    const k = i - cerebellumFrom
+    const count = Math.max(1, n - cerebellumFrom)
+    let [sx, sy, sz] = spherePoint(k, count)
+    const side = sx >= 0 ? 1 : -1
+    return [
+      sx * 0.42 + side * 0.06,
+      sy * 0.19 - 0.40,
+      sz * 0.27 - 0.68,
+    ]
+  }
+
+  let [ux, uy, uz] = spherePoint(i, cerebellumFrom)
+
+  // proportions: narrow across, tallest in the middle, longest front to back
+  ux *= 0.78
+  uy *= 0.60
+  uz *= 1.14
+
+  // taper the frontal and occipital poles
+  const taper = 1 - 0.2 * uz * uz
+  ux *= taper
+  uy *= taper
+
+  // flatten the underside, a brain does not hang below like a sphere
+  if (uy < 0) uy *= 0.78
+
+  // The longitudinal fissure parts the hemispheres along the top only, so the
+  // underside stays closed instead of notching into a heart.
+  const side = ux >= 0 ? 1 : -1
+  const fissure = Math.max(0, Math.min(1, (uy + 0.1) / 0.5))
+  ux += side * 0.09 * fissure
+
+  // gyri, just enough surface ripple to avoid reading as a smooth egg
+  const ripple = 0.04 * Math.sin(ux * 12) * Math.cos(uz * 9) + 0.025 * Math.sin(uy * 14)
+  const len = Math.hypot(ux, uy, uz) || 1
+  ux += (ux / len) * ripple
+  uy += (uy / len) * ripple
+  uz += (uz / len) * ripple
+
+  return [ux, uy, uz]
+}
+
 const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
   children,
+  phase = 'field',
   nodeColor = '#ffffff',
   pulseColor = '#ffe08a',
   decayColor = '#ff3b2e',
-  nodeCount = 72,
+  nodeCount = 130,
   connectionRadius = 190,
   maxSynapses = 4,
   hoverRadius = 130,
@@ -72,7 +146,13 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const mouseRef = useRef({ x: -9999, y: -9999, active: false })
+  const phaseRef = useRef<NetworkPhase>(phase)
   const rafRef = useRef<number | null>(null)
+
+  // Phase changes must not tear down the simulation, so it is read from a ref.
+  useEffect(() => {
+    phaseRef.current = phase
+  }, [phase])
 
   useEffect(() => {
     const wrap = wrapRef.current
@@ -93,6 +173,10 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
     let height = wrap.clientHeight || 1
     let dpr = Math.min(window.devicePixelRatio || 1, 2)
 
+    /** 0 = scattered field, 1 = fully gathered brain. */
+    let morph = 0
+    let spin = 0
+
     /**
      * Signal colour: yellow at the source, sliding to red as the pulse loses
      * energy further out in the network.
@@ -110,24 +194,31 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
     }
 
     class Neuron {
+      /** free-roaming position in the scattered field */
       x: number
       y: number
       vx: number
       vy: number
-      /** soma size */
+      /** position on the brain shell, before rotation */
+      bx = 0
+      by = 0
+      bz = 0
+      /** where this neuron is actually drawn this frame */
+      px = 0
+      py = 0
+      /** depth after rotation, drives how solid it looks */
+      depth = 1
       r: number
-      /** soma is a slightly squashed, rotated ellipse so nothing reads as a dot */
       squash: number
       tilt: number
       dendrites: Dendrite[] = []
-      edges: number[] = []
-      /** how close the cursor is, 0-1 */
+      edges2d: number[] = []
+      edges3d: number[] = []
       excite = 0
-      /** firing flash, decays to 0 */
       flash = 0
-      /** frames left before the neuron can fire again */
       refractory = 0
       phase: number
+      t = 0
 
       constructor() {
         this.x = Math.random() * width
@@ -139,6 +230,8 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
         this.squash = 0.62 + Math.random() * 0.3
         this.tilt = Math.random() * Math.PI
         this.phase = Math.random() * Math.PI * 2
+        this.px = this.x
+        this.py = this.y
 
         const spines = 3 + Math.floor(Math.random() * 4)
         for (let i = 0; i < spines; i++) {
@@ -159,10 +252,31 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
         this.x = Math.max(4, Math.min(width - 4, this.x))
         this.y = Math.max(4, Math.min(height - 4, this.y))
 
+        // Rotate the brain position and project it, then blend the two layouts.
+        const cos = Math.cos(spin)
+        const sin = Math.sin(spin)
+        const rx = this.bx * cos + this.bz * sin
+        let rz = -this.bx * sin + this.bz * cos
+
+        // a slight tilt so the brain is seen from just above, not edge on
+        const tc = Math.cos(0.32)
+        const ts = Math.sin(0.32)
+        const ry = this.by * tc - rz * ts
+        rz = this.by * ts + rz * tc
+
+        const scale = Math.min(width, height) * 0.34
+        const persp = 3.1 / (3.1 + rz)
+        const bpx = width / 2 + rx * scale * persp
+        const bpy = height / 2 + ry * scale * persp
+
+        this.depth = persp
+        this.px = this.x + (bpx - this.x) * morph
+        this.py = this.y + (bpy - this.y) * morph
+
         const m = mouseRef.current
         let target = 0
         if (m.active) {
-          const d = Math.hypot(this.x - m.x, this.y - m.y)
+          const d = Math.hypot(this.px - m.x, this.py - m.y)
           target = Math.max(0, 1 - d / hoverRadius)
         }
         this.excite += (target - this.excite) * 0.16
@@ -179,58 +293,57 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
         this.t = t
       }
 
-      t = 0
-
       draw() {
         const heatT = Math.min(1, this.flash)
         const glow = Math.max(this.excite * 0.75, heatT)
         const col = heatT > 0.01 ? mix(REST, heat(heatT), Math.min(1, heatT * 1.5)) : REST
 
-        // dendrites
-        const dendAlpha = (0.13 + glow * 0.62) * intensity
+        // Gathered into the brain, depth does the work the cursor did before.
+        const solid = 1 - morph + morph * (0.35 + (this.depth - 0.72) * 1.5)
+
+        const dendAlpha = (0.13 + glow * 0.62) * intensity * Math.max(0.2, solid)
         if (dendAlpha > 0.012) {
           ctx.lineWidth = 0.7
           ctx.strokeStyle = rgba(col, dendAlpha)
           for (const d of this.dendrites) {
             const wob = calm ? 0 : Math.sin(this.t * 0.0009 + d.sway) * 0.16
             const a = d.angle + wob
-            const len = d.len * (1 + glow * 0.35)
-            const ex = this.x + Math.cos(a) * len
-            const ey = this.y + Math.sin(a) * len
-            const mx = this.x + Math.cos(a) * len * 0.55
-            const my = this.y + Math.sin(a) * len * 0.55
+            // dendrites shrink as the neurons pack into the brain
+            const len = d.len * (1 + glow * 0.35) * (1 - 0.6 * morph)
+            const ex = this.px + Math.cos(a) * len
+            const ey = this.py + Math.sin(a) * len
+            const mx = this.px + Math.cos(a) * len * 0.55
+            const my = this.py + Math.sin(a) * len * 0.55
             const nx = -Math.sin(a) * len * d.bend * 0.4
             const ny = Math.cos(a) * len * d.bend * 0.4
             ctx.beginPath()
-            ctx.moveTo(this.x, this.y)
+            ctx.moveTo(this.px, this.py)
             ctx.quadraticCurveTo(mx + nx, my + ny, ex, ey)
             ctx.stroke()
           }
         }
 
-        // halo around an active soma
         if (glow > 0.02) {
           const rad = this.r * (5 + glow * 9)
-          const g = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, rad)
+          const g = ctx.createRadialGradient(this.px, this.py, 0, this.px, this.py, rad)
           g.addColorStop(0, rgba(col, 0.34 * glow * intensity))
           g.addColorStop(1, rgba(col, 0))
           ctx.fillStyle = g
           ctx.beginPath()
-          ctx.arc(this.x, this.y, rad, 0, Math.PI * 2)
+          ctx.arc(this.px, this.py, rad, 0, Math.PI * 2)
           ctx.fill()
         }
 
-        // soma
         const breathe = calm ? 1 : 1 + Math.sin(this.t * 0.0012 + this.phase) * 0.08
-        const rr = this.r * breathe * (1 + heatT * 0.7)
+        const rr = this.r * breathe * (1 + heatT * 0.7) * (1 - 0.15 * morph) * (morph ? this.depth : 1)
         ctx.beginPath()
-        ctx.ellipse(this.x, this.y, rr, rr * this.squash, this.tilt, 0, Math.PI * 2)
-        ctx.fillStyle = rgba(col, (0.28 + glow * 0.72) * intensity)
+        ctx.ellipse(this.px, this.py, rr, rr * this.squash, this.tilt, 0, Math.PI * 2)
+        ctx.fillStyle = rgba(col, (0.28 + glow * 0.72) * intensity * Math.max(0.25, solid))
         ctx.fill()
 
         if (heatT > 0.25) {
           ctx.beginPath()
-          ctx.arc(this.x, this.y, rr * 0.45, 0, Math.PI * 2)
+          ctx.arc(this.px, this.py, rr * 0.45, 0, Math.PI * 2)
           ctx.fillStyle = rgba([255, 255, 255], Math.min(0.85, heatT) * intensity)
           ctx.fill()
         }
@@ -240,15 +353,12 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
     interface Edge {
       a: Neuron
       b: Neuron
-      /** perpendicular offset of the bezier control point, as a fraction of length */
       bow: number
-      /** residual glow left behind by a signal */
       heat: number
     }
 
     interface Spike {
       edge: Edge
-      /** true when travelling a -> b */
       forward: boolean
       t: number
       speed: number
@@ -257,14 +367,15 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
 
     const neurons: Neuron[] = []
     const edges: Edge[] = []
+    const brainEdges: Edge[] = []
     const spikes: Spike[] = []
     const MAX_SPIKES = 340
 
     const control = (e: Edge) => {
-      const dx = e.b.x - e.a.x
-      const dy = e.b.y - e.a.y
-      const mx = (e.a.x + e.b.x) / 2
-      const my = (e.a.y + e.b.y) / 2
+      const dx = e.b.px - e.a.px
+      const dy = e.b.py - e.a.py
+      const mx = (e.a.px + e.b.px) / 2
+      const my = (e.a.py + e.b.py) / 2
       return { cx: mx - dy * e.bow, cy: my + dx * e.bow }
     }
 
@@ -272,8 +383,8 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
       const { cx, cy } = control(e)
       const u = 1 - t
       return {
-        x: u * u * e.a.x + 2 * u * t * cx + t * t * e.b.x,
-        y: u * u * e.a.y + 2 * u * t * cy + t * t * e.b.y,
+        x: u * u * e.a.px + 2 * u * t * cx + t * t * e.b.px,
+        y: u * u * e.a.py + 2 * u * t * cy + t * t * e.b.py,
       }
     }
 
@@ -282,11 +393,16 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
       n.refractory = 48 + Math.floor(Math.random() * 34)
       if (energy < 0.16) return
 
-      for (const ei of n.edges) {
+      // Signals travel whichever wiring is currently on screen.
+      const useBrain = morph > 0.5
+      const list = useBrain ? n.edges3d : n.edges2d
+      const pool = useBrain ? brainEdges : edges
+
+      for (const ei of list) {
         if (spikes.length >= MAX_SPIKES) break
-        // Not every synapse relays; the network stays legible.
         if (Math.random() > 0.82) continue
-        const e = edges[ei]
+        const e = pool[ei]
+        if (!e) continue
         const forward = e.a === n
         const other = forward ? e.b : e.a
         if (other.refractory > 0 && Math.random() > 0.25) continue
@@ -303,13 +419,24 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
     const build = () => {
       neurons.length = 0
       edges.length = 0
+      brainEdges.length = 0
       spikes.length = 0
+
       const count = Math.max(
         12,
         Math.round(nodeCount * Math.min(1.35, (width * height) / (1440 * 900)))
       )
       for (let i = 0; i < count; i++) neurons.push(new Neuron())
 
+      // brain shell coordinates
+      neurons.forEach((n, i) => {
+        const [bx, by, bz] = brainPoint(i, count)
+        n.bx = bx
+        n.by = by
+        n.bz = bz
+      })
+
+      // synapses across the scattered field
       const seen = new Set<string>()
       neurons.forEach((n, i) => {
         const near = neurons
@@ -322,16 +449,34 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
           const key = i < c.j ? `${i}:${c.j}` : `${c.j}:${i}`
           if (seen.has(key)) continue
           seen.add(key)
-          const edge: Edge = {
-            a: n,
-            b: c.o,
-            bow: (Math.random() - 0.5) * 0.22,
-            heat: 0,
-          }
-          edges.push(edge)
+          edges.push({ a: n, b: c.o, bow: (Math.random() - 0.5) * 0.22, heat: 0 })
           const idx = edges.length - 1
-          n.edges.push(idx)
-          c.o.edges.push(idx)
+          n.edges2d.push(idx)
+          c.o.edges2d.push(idx)
+        }
+      })
+
+      // connectome across the brain shell, so the gathered form is wired too
+      const seen3 = new Set<string>()
+      neurons.forEach((n, i) => {
+        const near = neurons
+          .map((o, j) => ({
+            o,
+            j,
+            d: Math.hypot(n.bx - o.bx, n.by - o.by, n.bz - o.bz),
+          }))
+          .filter((c) => c.j !== i && c.d < 0.42)
+          .sort((p, q) => p.d - q.d)
+          .slice(0, 3)
+
+        for (const c of near) {
+          const key = i < c.j ? `${i}:${c.j}` : `${c.j}:${i}`
+          if (seen3.has(key)) continue
+          seen3.add(key)
+          brainEdges.push({ a: n, b: c.o, bow: (Math.random() - 0.5) * 0.14, heat: 0 })
+          const idx = brainEdges.length - 1
+          n.edges3d.push(idx)
+          c.o.edges3d.push(idx)
         }
       })
     }
@@ -383,37 +528,65 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
     const ro = new ResizeObserver(resize)
     ro.observe(wrap)
 
-    const animate = (time: number) => {
-      // Fade rather than clear, so signals leave a faint comet trail.
-      ctx.fillStyle = `rgba(0,0,0,${trailOpacity})`
-      ctx.fillRect(0, 0, width, height)
-
-      // resting synapses
+    const drawEdges = (list: Edge[], visibility: number) => {
+      if (visibility <= 0.01) return
       ctx.lineWidth = 0.6
-      for (const e of edges) {
+      for (const e of list) {
         const base = Math.max(e.a.excite, e.b.excite)
-        const a = (0.055 + base * 0.18) * intensity
+        const depth = morph > 0.01 ? (e.a.depth + e.b.depth) / 2 : 1
+        const a = (0.055 + base * 0.18 + morph * 0.05) * intensity * visibility * Math.max(0.3, depth - 0.35)
         const { cx, cy } = control(e)
         ctx.beginPath()
-        ctx.moveTo(e.a.x, e.a.y)
-        ctx.quadraticCurveTo(cx, cy, e.b.x, e.b.y)
+        ctx.moveTo(e.a.px, e.a.py)
+        ctx.quadraticCurveTo(cx, cy, e.b.px, e.b.py)
         ctx.strokeStyle = rgba(REST, a)
         ctx.stroke()
 
-        // afterglow of a signal that just passed through
         if (e.heat > 0.01) {
           ctx.lineWidth = 0.6 + e.heat * 1.5
-          ctx.strokeStyle = rgba(heat(e.heat), e.heat * 0.55 * intensity)
+          ctx.strokeStyle = rgba(heat(e.heat), e.heat * 0.55 * intensity * visibility)
           ctx.beginPath()
-          ctx.moveTo(e.a.x, e.a.y)
-          ctx.quadraticCurveTo(cx, cy, e.b.x, e.b.y)
+          ctx.moveTo(e.a.px, e.a.py)
+          ctx.quadraticCurveTo(cx, cy, e.b.px, e.b.py)
           ctx.stroke()
           ctx.lineWidth = 0.6
           e.heat *= 0.945
         }
       }
+    }
 
-      // travelling signals
+    let idleFire = 0
+
+    const animate = (time: number) => {
+      // ease the morph toward whichever phase is active
+      const target = phaseRef.current === 'brain' ? 1 : 0
+      const step = calm ? 0.12 : 0.022
+      if (Math.abs(target - morph) > 0.0005) {
+        morph += (target - morph) * (step * 2)
+        morph = Math.max(0, Math.min(1, morph))
+      } else {
+        morph = target
+      }
+
+      if (morph > 0.02 && !calm) spin += 0.0045
+
+      ctx.fillStyle = `rgba(0,0,0,${trailOpacity})`
+      ctx.fillRect(0, 0, width, height)
+
+      // positions first, so every edge is drawn against fresh coordinates
+      for (const n of neurons) n.update(time)
+
+      const shown = easeInOut(morph)
+      drawEdges(edges, 1 - shown)
+      drawEdges(brainEdges, shown)
+
+      // Gathered up there is no cursor to excite anything, so it fires itself.
+      if (morph > 0.6 && time - idleFire > 430) {
+        idleFire = time
+        const n = neurons[Math.floor(Math.random() * neurons.length)]
+        if (n && n.refractory <= 0) fire(n, 0.95)
+      }
+
       for (let i = spikes.length - 1; i >= 0; i--) {
         const s = spikes[i]
         s.t += s.speed
@@ -423,7 +596,6 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
         const tt = s.forward ? s.t : 1 - s.t
         const col = heat(s.energy)
 
-        // comet tail along the synapse
         const tail = 0.3
         ctx.lineWidth = 1 + s.energy * 1.6
         ctx.beginPath()
@@ -438,7 +610,6 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
         ctx.strokeStyle = rgba(col, 0.5 * s.energy * intensity)
         ctx.stroke()
 
-        // head
         const head = pointOn(e, tt)
         const hr = 1.6 + s.energy * 2.2
         const g = ctx.createRadialGradient(head.x, head.y, 0, head.x, head.y, hr * 4)
@@ -453,15 +624,12 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
         if (s.t >= 1) {
           const target = s.forward ? e.b : e.a
           spikes.splice(i, 1)
-          if (target.refractory <= 0) fire(target, s.energy * 0.82)
+          if (target.refractory <= 0) fire(target, s.energy * 0.78)
           else target.flash = Math.max(target.flash, s.energy * 0.4)
         }
       }
 
-      for (const n of neurons) {
-        n.update(time)
-        n.draw()
-      }
+      for (const n of neurons) n.draw()
 
       rafRef.current = requestAnimationFrame(animate)
     }

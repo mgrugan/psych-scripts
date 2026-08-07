@@ -66,7 +66,7 @@ const UploadPanel: React.FC<UploadPanelProps> = ({ busy, onRun }) => {
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click()
         }}
-        className={`group relative cursor-pointer rounded-[22px] border border-dashed px-8 py-14 text-center transition-all duration-500 sm:px-14 sm:py-16 ${
+        className={`group relative cursor-pointer rounded-[22px] border border-dashed px-8 py-10 text-center transition-all duration-500 ${
           dragging
             ? 'border-[rgba(255,210,122,0.55)] bg-[rgba(255,210,122,0.05)]'
             : 'border-white/12 hover:border-white/25 hover:bg-white/[0.015]'
@@ -80,7 +80,7 @@ const UploadPanel: React.FC<UploadPanelProps> = ({ busy, onRun }) => {
           onChange={(e) => accept(e.target.files?.[0])}
         />
 
-        <div className="mx-auto mb-7 flex h-14 w-14 items-center justify-center rounded-full border border-white/12 transition-transform duration-700 group-hover:scale-110">
+        <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-full border border-white/12 transition-transform duration-700 group-hover:scale-110">
           <svg
             viewBox="0 0 24 24"
             fill="none"
@@ -88,7 +88,7 @@ const UploadPanel: React.FC<UploadPanelProps> = ({ busy, onRun }) => {
             strokeWidth="0.9"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="h-6 w-6 text-white/70"
+            className="h-5 w-5 text-white/70"
             aria-hidden="true"
           >
             <path d="M12 16V4" />
@@ -121,10 +121,10 @@ const UploadPanel: React.FC<UploadPanelProps> = ({ busy, onRun }) => {
         )}
       </div>
 
-      <div className="px-6 pt-8 pb-6 sm:px-8">
-        <div className="grid gap-8 sm:grid-cols-[1fr_auto] sm:items-end">
+      <div className="px-6 pt-6 pb-5">
+        <div className="grid gap-5">
           <div>
-            <p className="mb-3 text-[10px] font-medium tracking-widest-xl text-white/30 uppercase">
+            <p className="mb-2.5 text-[10px] font-medium tracking-widest-xl text-white/30 uppercase">
               Layout
             </p>
             <div className="inline-flex rounded-full border border-white/10 bg-white/[0.02] p-1">
@@ -145,13 +145,13 @@ const UploadPanel: React.FC<UploadPanelProps> = ({ busy, onRun }) => {
                 </button>
               ))}
             </div>
-            <p className="mt-3 text-[11px] font-extralight text-white/30">
+            <p className="mt-2.5 text-[11px] font-extralight text-white/30">
               {MODES.find((m) => m.id === mode)?.note}
             </p>
           </div>
 
-          <div className="sm:text-right">
-            <p className="mb-3 text-[10px] font-medium tracking-widest-xl text-white/30 uppercase">
+          <div>
+            <p className="mb-2.5 text-[10px] font-medium tracking-widest-xl text-white/30 uppercase">
               Top regions
             </p>
             <div className="inline-flex items-center gap-5 rounded-full border border-white/10 bg-white/[0.02] px-5 py-1.5">
@@ -181,18 +181,18 @@ const UploadPanel: React.FC<UploadPanelProps> = ({ busy, onRun }) => {
         </div>
 
         {(note || ageBlocked) && (
-          <p className="mt-6 text-[12px] font-extralight text-[#ffb27a]">
+          <p className="mt-4 text-[12px] font-extralight text-[#ffb27a]">
             {ageBlocked ? 'this sheet has no age column, so use the men vs women layout' : note}
           </p>
         )}
 
-        <div className="mt-8 h-px hairline" />
+        <div className="mt-6 h-px hairline" />
 
         <button
           type="button"
           disabled={!ready || ageBlocked}
           onClick={() => file && onRun(file, mode, topN)}
-          className={`relative mt-7 w-full overflow-hidden rounded-full py-4 text-[12px] tracking-widest uppercase transition-all duration-500 ${
+          className={`relative mt-6 w-full overflow-hidden rounded-full py-3.5 text-[12px] tracking-widest uppercase transition-all duration-500 ${
             ready && !ageBlocked
               ? 'bg-white font-semibold text-black hover:bg-[#ffe9c2]'
               : 'cursor-not-allowed border border-white/8 bg-white/[0.02] font-light text-white/25'
