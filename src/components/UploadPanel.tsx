@@ -99,10 +99,14 @@ const UploadPanel: React.FC<UploadPanelProps> = ({ busy, onRun }) => {
 
         {file ? (
           <>
-            <p className="font-display text-[17px] font-light tracking-tight text-white/95">
+            {/* real exports have long unbroken names, so this has to clip */}
+            <p
+              className="font-display truncate text-[17px] font-light tracking-tight text-white"
+              title={file.name}
+            >
               {file.name}
             </p>
-            <p className="mt-2 text-[12px] font-extralight tracking-wide text-white/40">
+            <p className="mt-2 text-[12px] font-light tracking-wide text-white/80">
               {formatBytes(file.size)}
               {preview
                 ? ` · ${preview.rowCount} rows · ${preview.roiCount} roi columns`
@@ -111,10 +115,10 @@ const UploadPanel: React.FC<UploadPanelProps> = ({ busy, onRun }) => {
           </>
         ) : (
           <>
-            <p className="font-display text-[19px] font-extralight tracking-tight text-white/85">
+            <p className="font-display text-[19px] font-light tracking-tight text-white">
               Drop the sheet here
             </p>
-            <p className="mt-2.5 text-[12px] font-extralight tracking-wide text-white/35">
+            <p className="mt-2.5 text-[12px] font-light tracking-wide text-white/75">
               export the google sheet as csv, or click to browse
             </p>
           </>
@@ -124,7 +128,7 @@ const UploadPanel: React.FC<UploadPanelProps> = ({ busy, onRun }) => {
       <div className="px-6 pt-6 pb-5">
         <div className="grid gap-5">
           <div>
-            <p className="mb-2.5 text-[10px] font-medium tracking-widest-xl text-white/30 uppercase">
+            <p className="mb-2.5 text-[10px] font-medium tracking-widest-xl text-white/70 uppercase">
               Layout
             </p>
             <div className="inline-flex rounded-full border border-white/10 bg-white/[0.02] p-1">
@@ -138,20 +142,20 @@ const UploadPanel: React.FC<UploadPanelProps> = ({ busy, onRun }) => {
                   className={`rounded-full px-5 py-2 text-[12px] tracking-wide transition-all duration-300 ${
                     mode === m.id
                       ? 'bg-white/90 font-medium text-black'
-                      : 'font-extralight text-white/45 hover:text-white/80'
+                      : 'font-light text-white/75 hover:text-white'
                   }`}
                 >
                   {m.label}
                 </button>
               ))}
             </div>
-            <p className="mt-2.5 text-[11px] font-extralight text-white/30">
+            <p className="mt-2.5 text-[11px] font-light text-white/70">
               {MODES.find((m) => m.id === mode)?.note}
             </p>
           </div>
 
           <div>
-            <p className="mb-2.5 text-[10px] font-medium tracking-widest-xl text-white/30 uppercase">
+            <p className="mb-2.5 text-[10px] font-medium tracking-widest-xl text-white/70 uppercase">
               Top regions
             </p>
             <div className="inline-flex items-center gap-5 rounded-full border border-white/10 bg-white/[0.02] px-5 py-1.5">
@@ -159,7 +163,7 @@ const UploadPanel: React.FC<UploadPanelProps> = ({ busy, onRun }) => {
                 type="button"
                 disabled={busy || topN <= 1}
                 onClick={() => setTopN((n) => Math.max(1, n - 1))}
-                className="text-lg font-extralight text-white/40 transition hover:text-white disabled:opacity-20"
+                className="text-lg font-light text-white/75 transition hover:text-white disabled:opacity-20"
                 aria-label="fewer regions"
               >
                 &minus;
@@ -171,7 +175,7 @@ const UploadPanel: React.FC<UploadPanelProps> = ({ busy, onRun }) => {
                 type="button"
                 disabled={busy || topN >= 40}
                 onClick={() => setTopN((n) => Math.min(40, n + 1))}
-                className="text-lg font-extralight text-white/40 transition hover:text-white disabled:opacity-20"
+                className="text-lg font-light text-white/75 transition hover:text-white disabled:opacity-20"
                 aria-label="more regions"
               >
                 +
@@ -181,7 +185,7 @@ const UploadPanel: React.FC<UploadPanelProps> = ({ busy, onRun }) => {
         </div>
 
         {(note || ageBlocked) && (
-          <p className="mt-4 text-[12px] font-extralight text-[#ffb27a]">
+          <p className="mt-4 text-[12px] font-light text-[#ffb27a]">
             {ageBlocked ? 'this sheet has no age column, so use the men vs women layout' : note}
           </p>
         )}
@@ -195,7 +199,7 @@ const UploadPanel: React.FC<UploadPanelProps> = ({ busy, onRun }) => {
           className={`relative mt-6 w-full overflow-hidden rounded-full py-3.5 text-[12px] tracking-widest uppercase transition-all duration-500 ${
             ready && !ageBlocked
               ? 'bg-white font-semibold text-black hover:bg-[#ffe9c2]'
-              : 'cursor-not-allowed border border-white/8 bg-white/[0.02] font-light text-white/25'
+              : 'cursor-not-allowed border border-white/15 bg-white/[0.02] font-light text-white/60'
           }`}
         >
           {busy ? 'Running the pipeline' : 'Run analysis'}

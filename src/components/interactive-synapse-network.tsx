@@ -245,8 +245,11 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
       }
 
       update(t: number) {
-        this.x += this.vx
-        this.y += this.vy
+        // Gathered up, the field position is parked so the neurons come back to
+        // where they left rather than somewhere else entirely.
+        const loose = 1 - morph
+        this.x += this.vx * loose
+        this.y += this.vy * loose
         if (this.x < 4 || this.x > width - 4) this.vx *= -1
         if (this.y < 4 || this.y > height - 4) this.vy *= -1
         this.x = Math.max(4, Math.min(width - 4, this.x))
@@ -275,9 +278,11 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
 
         const m = mouseRef.current
         let target = 0
-        if (m.active) {
+        if (m.active && loose > 0.05) {
+          // Packed into the brain nearly every neuron would sit inside the
+          // cursor radius at once, so the hover only bites in the open field.
           const d = Math.hypot(this.px - m.x, this.py - m.y)
-          target = Math.max(0, 1 - d / hoverRadius)
+          target = Math.max(0, 1 - d / hoverRadius) * loose
         }
         this.excite += (target - this.excite) * 0.16
 
@@ -359,6 +364,8 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
 
     interface Spike {
       edge: Edge
+      /** true when this signal is travelling the brain wiring, not the field */
+      brain: boolean
       forward: boolean
       t: number
       speed: number
@@ -393,6 +400,11 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
       n.refractory = 48 + Math.floor(Math.random() * 34)
       if (energy < 0.16) return
 
+      // Part way through a morph the two layouts disagree about where every
+      // neuron is, so a signal launched now would be dragged across the screen
+      // as the endpoints move. Flash, but send nothing.
+      if (morph > 0.05 && morph < 0.95) return
+
       // Signals travel whichever wiring is currently on screen.
       const useBrain = morph > 0.5
       const list = useBrain ? n.edges3d : n.edges2d
@@ -408,6 +420,7 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
         if (other.refractory > 0 && Math.random() > 0.25) continue
         spikes.push({
           edge: e,
+          brain: useBrain,
           forward,
           t: 0,
           speed: (0.012 + Math.random() * 0.012) * (calm ? 0.6 : 1),
@@ -556,10 +569,23 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
     }
 
     let idleFire = 0
+    let wasBrain = false
 
     const animate = (time: number) => {
       // ease the morph toward whichever phase is active
       const target = phaseRef.current === 'brain' ? 1 : 0
+
+      // On a phase flip, anything still in flight belongs to the layout that is
+      // leaving. Its endpoints are about to move across the whole viewport, so
+      // it goes rather than streaking after them.
+      const nowBrain = phaseRef.current === 'brain'
+      if (nowBrain !== wasBrain) {
+        for (let i = spikes.length - 1; i >= 0; i--) {
+          if (spikes[i].brain !== nowBrain) spikes.splice(i, 1)
+        }
+        for (const e of nowBrain ? edges : brainEdges) e.heat = 0
+        wasBrain = nowBrain
+      }
       const step = calm ? 0.12 : 0.022
       if (Math.abs(target - morph) > 0.0005) {
         morph += (target - morph) * (step * 2)
@@ -595,6 +621,8 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
 
         const tt = s.forward ? s.t : 1 - s.t
         const col = heat(s.energy)
+        const vis = s.brain ? shown : 1 - shown
+        if (vis <= 0.02) continue
 
         const tail = 0.3
         ctx.lineWidth = 1 + s.energy * 1.6
@@ -607,14 +635,14 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
           if (k === 0) ctx.moveTo(q.x, q.y)
           else ctx.lineTo(q.x, q.y)
         }
-        ctx.strokeStyle = rgba(col, 0.5 * s.energy * intensity)
+        ctx.strokeStyle = rgba(col, 0.5 * s.energy * intensity * vis)
         ctx.stroke()
 
         const head = pointOn(e, tt)
         const hr = 1.0 + s.energy * 1.4
         const g = ctx.createRadialGradient(head.x, head.y, 0, head.x, head.y, hr * 3.6)
-        g.addColorStop(0, rgba([255, 255, 255], 0.9 * intensity))
-        g.addColorStop(0.35, rgba(col, 0.7 * intensity))
+        g.addColorStop(0, rgba([255, 255, 255], 0.9 * intensity * vis))
+        g.addColorStop(0.35, rgba(col, 0.7 * intensity * vis))
         g.addColorStop(1, rgba(col, 0))
         ctx.fillStyle = g
         ctx.beginPath()

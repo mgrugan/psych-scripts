@@ -26,7 +26,7 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({ result, onReset }) => {
               className={`rounded-full px-5 py-2 text-[11px] tracking-[0.18em] uppercase transition-all duration-300 ${
                 i === active
                   ? 'bg-white/90 font-medium text-black'
-                  : 'font-extralight text-white/40 hover:text-white/85'
+                  : 'font-light text-white/75 hover:text-white'
               }`}
             >
               {p.condition}
@@ -37,13 +37,13 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({ result, onReset }) => {
         <div className="flex items-center gap-2">
           <a
             href={`${plot.png}?download=1`}
-            className="rounded-full border border-white/10 px-5 py-2 text-[10px] font-light tracking-[0.18em] text-white/55 uppercase transition-all duration-300 hover:border-white/30 hover:text-white"
+            className="rounded-full border border-white/10 px-5 py-2 text-[10px] font-light tracking-[0.18em] text-white/85 uppercase transition-all duration-300 hover:border-white/30 hover:text-white"
           >
             Png
           </a>
           <a
             href={`${plot.pdf}?download=1`}
-            className="rounded-full border border-white/10 px-5 py-2 text-[10px] font-light tracking-[0.18em] text-white/55 uppercase transition-all duration-300 hover:border-white/30 hover:text-white"
+            className="rounded-full border border-white/10 px-5 py-2 text-[10px] font-light tracking-[0.18em] text-white/85 uppercase transition-all duration-300 hover:border-white/30 hover:text-white"
           >
             Pdf
           </a>
@@ -56,7 +56,7 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({ result, onReset }) => {
           <button
             type="button"
             onClick={onReset}
-            className="rounded-full border border-white/10 px-5 py-2 text-[10px] font-light tracking-[0.18em] text-white/45 uppercase transition-all duration-300 hover:border-white/25 hover:text-white"
+            className="rounded-full border border-white/10 px-5 py-2 text-[10px] font-light tracking-[0.18em] text-white/75 uppercase transition-all duration-300 hover:border-white/25 hover:text-white"
           >
             New
           </button>
@@ -79,10 +79,10 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({ result, onReset }) => {
       </div>
 
       <div className="flex shrink-0 flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-        <p className="text-[11px] font-extralight tracking-wide text-white/35">
+        <p className="text-[11px] font-light tracking-wide text-white/75">
           {plot.rois.join('  ·  ')}
         </p>
-        <p className="text-[10px] font-extralight tracking-[0.2em] text-white/25 uppercase">
+        <p className="text-[10px] font-light tracking-[0.2em] text-white/65 uppercase">
           {result.rows} rows
           {result.skipped > 0 && (
             <span className="text-[#ffb27a]"> · {result.skipped} set aside</span>
