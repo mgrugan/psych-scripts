@@ -8,6 +8,7 @@ import type { Mode } from './lib/csv'
 const App: React.FC = () => {
   const [engine, setEngine] = useState<EngineHealth | null>(null)
   const [busy, setBusy] = useState(false)
+  const [phase, setPhase] = useState('queued')
   const [result, setResult] = useState<AnalysisResult | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -18,8 +19,9 @@ const App: React.FC = () => {
   const run = async (file: File, mode: Mode, topN: number) => {
     setBusy(true)
     setError(null)
+    setPhase('queued')
     try {
-      const res = await analyze(file, mode, topN)
+      const res = await analyze(file, mode, topN, setPhase)
       setResult(res)
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (e) {
@@ -111,7 +113,7 @@ const App: React.FC = () => {
 
               {busy && (
                 <p className="mt-7 text-center text-[11px] font-extralight tracking-[0.24em] text-white/35 uppercase">
-                  R is drawing your conditions
+                  {phase === 'queued' ? 'Waiting for the engine' : 'R is drawing your conditions'}
                 </p>
               )}
 

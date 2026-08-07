@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: psych-scripts
+    runtime: docker
+    plan: free
+    region: oregon
+    branch: roi-dashboard
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Scratch space for uploads and rendered plots. Wiped on every restart,
+      # which is fine because nothing here is meant to be kept.
+      - key: JOBS_DIR
+        value: /tmp/jobs
+      # A free instance sleeps, so give a cold run room to finish.
+      - key: ANALYSIS_TIMEOUT_MS
+        value: "480000"
+      - key: JOB_TTL_MS
+        value: "21600000"

@@ -49,7 +49,23 @@ writes a png and a pdf per condition plus a log and a manifest.
 
 The two original scripts are still here as `adults` and `mosiac script`.
 
+## Putting it online
+
+There is a `render.yaml` and a `Dockerfile`, so Render can build it as a
+Blueprint. Point Render at this repo, pick the `roi-dashboard` branch, and it
+installs R and node into the image itself. Nothing to configure by hand.
+
+The free instance sleeps when nobody is using it, so the first hit after a quiet
+spell takes about a minute to wake up before it will do anything.
+
 ## Notes
 
-Uploads land in `.jobs/` and get swept after 12 hours. If R lives somewhere odd,
-set `RSCRIPT` to its path.
+Uploads land in `.jobs/` locally, or `/tmp/jobs` on Render, and get swept after a
+few hours. Nothing is kept.
+
+A run is queued rather than done on the spot, since a full sheet takes long
+enough that the browser would otherwise be left holding a request open. The page
+polls until the plots are ready. Only one run happens at a time, because R with
+the tidyverse loaded is the heaviest thing on a small box.
+
+If R lives somewhere odd, set `RSCRIPT` to its path.
