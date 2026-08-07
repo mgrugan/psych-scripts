@@ -13,6 +13,8 @@ export interface AnalysisResult {
   mode: Mode
   topN: number
   rows: number
+  /** rows set aside because they had no usable sex, condition or age */
+  skipped: number
   roiCount: number
   log: string
   plots: PlotResult[]

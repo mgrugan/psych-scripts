@@ -83,7 +83,11 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({ result, onReset }) => {
           {plot.rois.join('  ·  ')}
         </p>
         <p className="text-[10px] font-extralight tracking-[0.2em] text-white/25 uppercase">
-          {result.rows} rows · {result.roiCount} rois · top {result.topN} ·{' '}
+          {result.rows} rows
+          {result.skipped > 0 && (
+            <span className="text-[#ffb27a]"> · {result.skipped} set aside</span>
+          )}{' '}
+          · {result.roiCount} rois · top {result.topN} ·{' '}
           {result.mode === 'age' ? 'split by age' : 'men vs women'}
         </p>
       </div>

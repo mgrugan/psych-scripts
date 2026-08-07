@@ -31,12 +31,20 @@ npm start
 ## What the sheet needs
 
 Both layouts want a condition column (1 face, 2 number, 3 geometry, 4 word) and a
-sex column (0 men, 1 women). The age layout also wants an age column. Anything
-named like `2001 Precentral_L` counts as an ROI, so extra metadata columns are
-left alone.
+sex column. The age layout also wants an age column. Anything named like
+`2001 Precentral_L` counts as an ROI, so extra metadata columns are left alone.
 
-Headers get tidied on the way in, so `Participant`, `Condition`, `Sex_m0f1` and
-`Age` all work.
+It is fairly forgiving about the rest:
+
+- Headers get tidied, so `Participant`, `Condition`, `Sex_m0f1`, `Subject` and
+  `Age` all work, and a stray quote left on the last header cell is stripped.
+- Sex can be 0 and 1, 1 and 2, or `M` and `F`. It ends up as 0 for men and 1 for
+  women either way.
+- Rows with no usable sex, condition or age are set aside instead of taking the
+  run down with them. The count shows up under the plot so you know it happened.
+- Regions without at least two readings in both groups are left out of the
+  ranking rather than sorting to the top on a divide by zero.
+- Windows line endings are fine.
 
 ## Just the R part
 

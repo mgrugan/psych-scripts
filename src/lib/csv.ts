@@ -23,6 +23,8 @@ const META = [
   'age',
   'ageyears',
   'age_years',
+  'agegroup',
+  'subjectrow',
 ]
 
 /** Split one CSV line, honouring quoted fields. */

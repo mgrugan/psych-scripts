@@ -72,6 +72,12 @@ say <- function(...) {
 
 raw <- read.csv(opts$input, check.names = FALSE)
 
+if (nrow(raw) == 0) stop("that file has no rows in it", call. = FALSE)
+
+# Sheets exported from Google sometimes leave a stray quote on the last header
+# cell, which would otherwise become part of the column name.
+names(raw) <- trimws(gsub('^"+|"+$', "", names(raw)))
+
 # Tolerate the handful of header spellings that come out of the sheet.
 rename_if_present <- function(df, from, to) {
   hit <- which(tolower(names(df)) == tolower(from))
@@ -102,10 +108,32 @@ if (length(missing_cols) > 0) {
 }
 if (!"ParticipantID" %in% names(raw)) raw$ParticipantID <- seq_len(nrow(raw))
 
+# Sex arrives coded every which way depending on who built the sheet, so it is
+# normalised to 0 for men and 1 for women. Anything that is neither becomes NA
+# and the row is dropped, since every plot here is a two group comparison.
+normalize_sex <- function(x) {
+  s <- tolower(trimws(as.character(x)))
+
+  out <- rep(NA_real_, length(s))
+  out[s %in% c("0", "m", "male", "man", "men", "boy", "boys")] <- 0
+  out[s %in% c("1", "f", "female", "woman", "women", "girl", "girls")] <- 1
+
+  num <- suppressWarnings(as.numeric(s))
+  fill <- is.na(out) & !is.na(num)
+  out[fill] <- num[fill]
+
+  vals <- sort(unique(out[!is.na(out)]))
+  # a sheet coded 1 and 2 rather than 0 and 1
+  if (length(vals) == 2 && vals[1] == 1 && vals[2] == 2) out <- out - 1
+
+  out[!out %in% c(0, 1)] <- NA_real_
+  out
+}
+
 dat <- raw %>%
   mutate(
-    ConditionCode = as.numeric(ConditionCode),
-    Sex = as.numeric(Sex),
+    ConditionCode = suppressWarnings(as.numeric(ConditionCode)),
+    Sex = normalize_sex(Sex),
     ConditionName = case_when(
       ConditionCode == 1 ~ "FACE",
       ConditionCode == 2 ~ "NUMBER",
@@ -116,7 +144,19 @@ dat <- raw %>%
   )
 
 if (opts$mode == "age") {
-  dat <- dat %>% mutate(AgeYears = as.numeric(AgeYears))
+  dat <- dat %>% mutate(AgeYears = suppressWarnings(as.numeric(AgeYears)))
+}
+
+# Rows that cannot be placed in a group are set aside rather than being allowed
+# to poison a median or a mean further down.
+before_rows <- nrow(dat)
+dat <- dat %>% filter(!is.na(Sex), !is.na(ConditionCode))
+if (opts$mode == "age") dat <- dat %>% filter(!is.na(AgeYears))
+skipped_rows <- before_rows - nrow(dat)
+
+if (nrow(dat) == 0) {
+  stop("no rows were left once rows with no sex or condition were set aside",
+       call. = FALSE)
 }
 
 meta_cols <- c("ParticipantID", "ConditionCode", "Sex", "AgeYears", "ConditionName")
@@ -149,6 +189,11 @@ top_n <- max(1, min(as.numeric(opts$top_n), length(roi_cols)))
 
 say("mode: ", opts$mode)
 say("rows: ", nrow(dat), " | roi columns: ", length(roi_cols), " | top n: ", top_n)
+if (skipped_rows > 0) {
+  say("set aside ", skipped_rows,
+      " row(s) with no usable sex, condition",
+      if (opts$mode == "age") " or age" else "")
+}
 if (length(dropped) > 0) {
   say("ignored as non-roi: ", paste(dropped, collapse = ", "))
 }
@@ -212,6 +257,13 @@ rank_rois <- function(cond_df) {
       pooled_sd = sqrt(((boys_n - 1) * boys_sd^2 +
                           (girls_n - 1) * girls_sd^2) / (boys_n + girls_n - 2)),
       standardized_diff = abs(boys_mean - girls_mean) / pooled_sd
+    ) %>%
+    # A region needs real numbers on both sides to be ranked at all. Without
+    # this an all blank column would sort to the top and take the plot down.
+    filter(
+      boys_n >= 2, girls_n >= 2,
+      is.finite(pooled_sd), pooled_sd > 0,
+      is.finite(standardized_diff)
     ) %>%
     arrange(desc(standardized_diff))
 }
@@ -293,8 +345,12 @@ make_plot_sex <- function(condition_name) {
     filter(ConditionName == condition_name) %>%
     arrange(Sex)
 
-  if (sum(cond_df$Sex == 0) == 0 || sum(cond_df$Sex == 1) == 0) {
-    say("skipping ", condition_name, ": needs both sexes present")
+  n_men   <- sum(cond_df$Sex == 0, na.rm = TRUE)
+  n_women <- sum(cond_df$Sex == 1, na.rm = TRUE)
+
+  if (n_men == 0 || n_women == 0) {
+    say("skipping ", condition_name, ": needs both men and women present")
+    skip_reasons <<- c(skip_reasons, "every condition was missing one of the two groups")
     return(NULL)
   }
 
@@ -311,11 +367,17 @@ make_plot_sex <- function(condition_name) {
   girls_center <- (min(girls_rows) + max(girls_rows)) / 2
 
   roi_diffs <- rank_rois(cond_df)
-  selected_roi_cols    <- roi_diffs$ROI[1:top_n]
+  if (nrow(roi_diffs) == 0) {
+    say("skipping ", condition_name, ": no region has enough data in both groups")
+    skip_reasons <<- c(skip_reasons, "no region had at least two readings in both groups")
+    return(NULL)
+  }
+  take <- min(top_n, nrow(roi_diffs))
+  selected_roi_cols    <- roi_diffs$ROI[seq_len(take)]
   selected_roi_numbers <- roi_labels(selected_roi_cols)
 
   say("")
-  say(condition_name, " top ", top_n, " rois by standardized men vs women difference:")
+  say(condition_name, " top ", take, " rois by standardized men vs women difference:")
   say(paste(selected_roi_numbers, collapse = " "))
   say("men rows 1 - ", max(boys_rows),
       " | blank gap | women rows ", min(girls_rows), " - ", max(girls_rows))
@@ -323,7 +385,7 @@ make_plot_sex <- function(condition_name) {
   threshold_df <- build_thresholds(cond_df, selected_roi_cols)
   plot_df <- shape_plot_df(cond_df, selected_roi_cols, selected_roi_numbers, threshold_df)
 
-  n_roi   <- as.numeric(top_n)
+  n_roi   <- take
   label_x <- 0.15
 
   p <- ggplot(plot_df,
@@ -375,8 +437,12 @@ make_plot_age <- function(condition_name) {
     filter(ConditionName == condition_name) %>%
     arrange(Sex, AgeYears)
 
-  if (sum(cond_df$Sex == 0) == 0 || sum(cond_df$Sex == 1) == 0) {
-    say("skipping ", condition_name, ": needs both sexes present")
+  n_boys  <- sum(cond_df$Sex == 0, na.rm = TRUE)
+  n_girls <- sum(cond_df$Sex == 1, na.rm = TRUE)
+
+  if (n_boys == 0 || n_girls == 0) {
+    say("skipping ", condition_name, ": needs both boys and girls present")
+    skip_reasons <<- c(skip_reasons, "every condition was missing one of the two groups")
     return(NULL)
   }
 
@@ -405,11 +471,17 @@ make_plot_age <- function(condition_name) {
   girls_older_center   <- (girls_median_line_y + max(girls_rows)) / 2
 
   roi_diffs <- rank_rois(cond_df)
-  selected_roi_cols    <- roi_diffs$ROI[1:top_n]
+  if (nrow(roi_diffs) == 0) {
+    say("skipping ", condition_name, ": no region has enough data in both groups")
+    skip_reasons <<- c(skip_reasons, "no region had at least two readings in both groups")
+    return(NULL)
+  }
+  take <- min(top_n, nrow(roi_diffs))
+  selected_roi_cols    <- roi_diffs$ROI[seq_len(take)]
   selected_roi_numbers <- roi_labels(selected_roi_cols)
 
   say("")
-  say(condition_name, " top ", top_n, " rois by standardized boys vs girls difference:")
+  say(condition_name, " top ", take, " rois by standardized boys vs girls difference:")
   say(paste(selected_roi_numbers, collapse = " "))
   say("boys median age: ",  boys_median)
   say("girls median age: ", girls_median)
@@ -421,7 +493,7 @@ make_plot_age <- function(condition_name) {
   side_label_x        <- -0.2
   median_label_x      <- -0.2
   median_line_x_start <- 0.7
-  median_line_x_end   <- top_n + 0.5
+  median_line_x_end   <- take + 0.5
 
   group_labels_df <- tibble(
     y = c(boys_younger_center, boys_older_center,
@@ -459,7 +531,7 @@ make_plot_age <- function(condition_name) {
     ) +
     scale_y_reverse() +
     scale_x_continuous(
-      breaks = seq_len(top_n),
+      breaks = seq_len(take),
       labels = selected_roi_numbers,
       expand = expansion(add = c(1.8, 0.5))
     ) +
@@ -500,6 +572,7 @@ safe_name <- function(x) gsub("[^A-Za-z0-9_-]+", "_", x)
 json_string <- function(x) paste0('"', gsub('"', '\\\\"', as.character(x)), '"')
 
 entries <- character(0)
+skip_reasons <- character(0)
 index <- 0
 
 for (condition_name in conditions) {
@@ -507,7 +580,9 @@ for (condition_name in conditions) {
   built <- tryCatch(
     if (opts$mode == "age") make_plot_age(condition_name) else make_plot_sex(condition_name),
     error = function(e) {
-      say("failed on ", condition_name, ": ", conditionMessage(e))
+      msg <- conditionMessage(e)
+      say("failed on ", condition_name, ": ", msg)
+      skip_reasons <<- c(skip_reasons, msg)
       NULL
     }
   )
@@ -539,7 +614,15 @@ for (condition_name in conditions) {
 }
 
 if (index == 0) {
-  stop("no conditions could be plotted from this file", call. = FALSE)
+  reason <- if (length(skip_reasons) > 0) names(sort(table(skip_reasons), decreasing = TRUE))[1] else ""
+  detail <- if (skipped_rows > 0) {
+    paste0(" (", skipped_rows, " row(s) had no usable sex, condition",
+           if (opts$mode == "age") " or age" else "", ")")
+  } else ""
+  stop(paste0("nothing could be plotted: ",
+              if (nzchar(reason)) reason else "no condition had usable data",
+              detail),
+       call. = FALSE)
 }
 
 manifest <- paste0(
@@ -547,6 +630,7 @@ manifest <- paste0(
   '"mode":',       json_string(opts$mode), ",",
   '"topN":',       top_n, ",",
   '"rows":',       nrow(dat), ",",
+  '"skipped":',    skipped_rows, ",",
   '"roiCount":',   length(roi_cols), ",",
   '"plots":[',     paste(entries, collapse = ","), "]",
   "}"

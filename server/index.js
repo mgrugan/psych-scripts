@@ -182,6 +182,7 @@ async function execute(jobId, { jobDir, outDir, inputPath, mode, topN, sourceNam
     mode: manifest.mode,
     topN: manifest.topN,
     rows: manifest.rows,
+    skipped: manifest.skipped || 0,
     roiCount: manifest.roiCount,
     log,
     plots: (manifest.plots || []).map((p) => ({
