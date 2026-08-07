@@ -1,0 +1,253 @@
+```{r}
+library(tidyverse)
+library(grid)
+library(cowplot)
+
+adults <- read.csv(
+  "/Users/mariogrugan/Downloads/FNSW_gender_Adults_n170 - AAL ROIs - all conditions and participants (1).csv",
+  check.names = FALSE
+)
+
+adults <- adults %>%
+  rename(
+    ParticipantID = Participant,
+    ConditionCode = Condition,
+    Sex           = Sex_m0f1
+  ) %>%
+  mutate(
+    ConditionCode = as.numeric(ConditionCode),
+    Sex = as.numeric(Sex),
+    ConditionName = case_when(
+      ConditionCode == 1 ~ "FACE",
+      ConditionCode == 2 ~ "NUMBER",
+      ConditionCode == 3 ~ "GEOMETRY",
+      ConditionCode == 4 ~ "WORD",
+      TRUE ~ paste0("CONDITION_", ConditionCode)
+    )
+  )
+
+roi_cols_adult <- setdiff(names(adults),
+                          c("ParticipantID", "ConditionCode", "Sex", "ConditionName"))
+
+adults[, roi_cols_adult] <- lapply(
+  adults[, roi_cols_adult],
+  function(x) as.numeric(as.character(x))
+)
+
+
+make_extreme_legend_adult <- function() {
+
+  n_steps <- 200
+
+  blue_ramp <- colorRampPalette(c("#083DFF", "white"))(n_steps)
+  red_ramp  <- colorRampPalette(c("#FF3B30", "white"))(n_steps)
+
+  blue_raster <- as.raster(matrix(blue_ramp, nrow = 1))
+  red_raster  <- as.raster(matrix(red_ramp,  nrow = 1))
+
+  bar_x_left  <- 0.05
+  bar_x_right <- 0.60
+  bar_width   <- bar_x_right - bar_x_left
+
+  blue_title_y <- 0.74
+  blue_bar_y   <- 0.62
+  blue_bar_h   <- 0.05
+  blue_tick_y  <- 0.50
+
+  red_title_y  <- 0.34
+  red_bar_y    <- 0.22
+  red_bar_h    <- 0.05
+  red_tick_y   <- 0.10
+
+  gTree(children = gList(
+    textGrob("low-end extreme", x = bar_x_left, y = blue_title_y, hjust = 0,
+             gp = gpar(fontface = "bold", fontsize = 11)),
+    rasterGrob(blue_raster, x = bar_x_left, y = blue_bar_y,
+               width = bar_width, height = blue_bar_h,
+               hjust = 0, vjust = 0.5, interpolate = TRUE),
+    textGrob("max", x = bar_x_left,  y = blue_tick_y, hjust = 0, gp = gpar(fontsize = 8)),
+    textGrob("mid", x = bar_x_right, y = blue_tick_y, hjust = 1, gp = gpar(fontsize = 8)),
+    textGrob("high-end extreme", x = bar_x_left, y = red_title_y, hjust = 0,
+             gp = gpar(fontface = "bold", fontsize = 11)),
+    rasterGrob(red_raster, x = bar_x_left, y = red_bar_y,
+               width = bar_width, height = red_bar_h,
+               hjust = 0, vjust = 0.5, interpolate = TRUE),
+    textGrob("max", x = bar_x_left,  y = red_tick_y, hjust = 0, gp = gpar(fontsize = 8)),
+    textGrob("mid", x = bar_x_right, y = red_tick_y, hjust = 1, gp = gpar(fontsize = 8))
+  ))
+}
+
+
+make_plot_adult <- function(condition_name, top_n = 10) {
+
+  cond_df <- adults %>%
+    filter(ConditionName == condition_name) %>%
+    arrange(Sex)
+
+  GAP <- 8  
+
+  n_men <- sum(cond_df$Sex == 0)
+  base_row <- seq_len(nrow(cond_df))
+ 
+  cond_df$ParticipantRow <- ifelse(cond_df$Sex == 1, base_row + GAP, base_row)
+
+  boys_rows  <- cond_df$ParticipantRow[cond_df$Sex == 0]
+  girls_rows <- cond_df$ParticipantRow[cond_df$Sex == 1]
+
+  sex_split_y <- max(boys_rows) + (GAP / 2) + 0.5
+
+  boys_center  <- (min(boys_rows)  + max(boys_rows))  / 2
+  girls_center <- (min(girls_rows) + max(girls_rows)) / 2
+
+  roi_diffs <- tibble(
+    ROI = roi_cols_adult,
+    boys_mean  = map_dbl(roi_cols_adult, ~ mean(cond_df[cond_df$Sex == 0, .x], na.rm = TRUE)),
+    girls_mean = map_dbl(roi_cols_adult, ~ mean(cond_df[cond_df$Sex == 1, .x], na.rm = TRUE)),
+    boys_sd    = map_dbl(roi_cols_adult, ~ sd(cond_df[cond_df$Sex == 0, .x], na.rm = TRUE)),
+    girls_sd   = map_dbl(roi_cols_adult, ~ sd(cond_df[cond_df$Sex == 1, .x], na.rm = TRUE)),
+    boys_n     = map_dbl(roi_cols_adult, ~ sum(!is.na(cond_df[cond_df$Sex == 0, .x]))),
+    girls_n    = map_dbl(roi_cols_adult, ~ sum(!is.na(cond_df[cond_df$Sex == 1, .x])))
+  ) %>%
+    mutate(
+      pooled_sd = sqrt(((boys_n - 1) * boys_sd^2 +
+                          (girls_n - 1) * girls_sd^2) / (boys_n + girls_n - 2)),
+      standardized_diff = abs(boys_mean - girls_mean) / pooled_sd
+    ) %>%
+    arrange(desc(standardized_diff))
+
+  selected_roi_cols <- roi_diffs$ROI[1:top_n]
+  selected_roi_numbers <- str_extract(selected_roi_cols, "^[0-9]+")
+
+  cat("\n", condition_name, "top", top_n,
+      "rois by standardized men vs women difference:\n")
+  cat(selected_roi_numbers, "\n")
+  cat("men rows 1 -", max(boys_rows),
+      "| blank gap |", "women rows", min(girls_rows), "-", max(girls_rows), "\n")
+  cat("black separator drawn at y =", sex_split_y, "\n")
+
+  threshold_df <- tibble()
+
+  for (roi in selected_roi_cols) {
+
+    boys_values  <- cond_df[cond_df$Sex == 0, roi]
+    girls_values <- cond_df[cond_df$Sex == 1, roi]
+
+    boys_mean  <- mean(boys_values,  na.rm = TRUE)
+    girls_mean <- mean(girls_values, na.rm = TRUE)
+
+    if (girls_mean > boys_mean) {
+      lower_values  <- boys_values
+      higher_values <- girls_values
+      low_color_sign  <- -1
+      high_color_sign <- 1
+      topg <- "girls"
+    } else {
+      lower_values  <- girls_values
+      higher_values <- boys_values
+      low_color_sign  <- 1
+      high_color_sign <- -1
+      topg <- "boys"
+    }
+
+    lowthresh    <- quantile(lower_values,  0.33, na.rm = TRUE)
+    highthresh   <- quantile(higher_values, 0.67, na.rm = TRUE)
+    low_extreme  <- min(lower_values,  na.rm = TRUE)
+    high_extreme <- max(higher_values, na.rm = TRUE)
+
+    threshold_df <- bind_rows(threshold_df, tibble(
+      ROI = roi,
+      lowthresh = as.numeric(lowthresh),
+      highthresh = as.numeric(highthresh),
+      low_extreme = low_extreme,
+      high_extreme = high_extreme,
+      low_color_sign = low_color_sign,
+      high_color_sign = high_color_sign,
+      topg = topg
+    ))
+  }
+
+  plot_df <- cond_df %>%
+    select(ParticipantID, Sex, ParticipantRow, all_of(selected_roi_cols)) %>%
+    pivot_longer(cols = all_of(selected_roi_cols),
+                 names_to = "ROI", values_to = "Value") %>%
+    left_join(threshold_df, by = "ROI") %>%
+    mutate(
+      ROI_number = str_extract(ROI, "^[0-9]+"),
+      ROI_number = factor(ROI_number, levels = selected_roi_numbers),
+      FillValue = case_when(
+        Value < lowthresh & lowthresh != low_extreme ~
+          low_color_sign * ((lowthresh - Value) / (lowthresh - low_extreme)),
+        Value > highthresh & highthresh != high_extreme ~
+          high_color_sign * ((Value - highthresh) / (high_extreme - highthresh)),
+        TRUE ~ 0
+      ),
+      FillValue = pmax(pmin(FillValue, 1), -1)
+    )
+
+  n_roi      <- as.numeric(top_n)      
+  x_left     <- 0.40
+  x_right    <- n_roi + 0.60
+  y_line     <- as.numeric(sex_split_y)
+  y_men      <- as.numeric(boys_center)
+  y_women    <- as.numeric(girls_center)
+  label_x    <- 0.15                  
+
+  p <- ggplot(plot_df,
+              aes(x = as.numeric(ROI_number), y = ParticipantRow, fill = FillValue)) +
+
+    geom_tile(color = "gray", linewidth = 0.25) +
+
+    geom_text(aes(label = sprintf("%.3f", Value)), size = 1.7, color = "gray") +
+
+    scale_y_reverse() +
+
+    scale_x_continuous(
+      breaks = seq_len(n_roi),
+      labels = selected_roi_numbers,
+      expand = expansion(add = c(1.2, 0.4))
+    ) +
+
+    scale_fill_gradientn(
+      colours = c("blue", "white", "white", "red"),
+      values  = scales::rescale(c(-1, 0, 0.001, 1)),
+      limits  = c(-1, 1),
+      guide   = "none"
+    ) +
+
+    geom_hline(yintercept = y_line, colour = "black", linewidth = 3) +
+
+
+    annotate("label", x = label_x, y = y_men,   label = "MEN",
+             hjust = 0.5, vjust = 0.5, fontface = "bold", size = 6,
+             colour = "black", fill = "white", label.size = 0.7) +
+    annotate("label", x = label_x, y = y_women, label = "WOMEN",
+             hjust = 0.5, vjust = 0.5, fontface = "bold", size = 6,
+             colour = "black", fill = "white", label.size = 0.7) +
+
+    coord_cartesian(clip = "off") +
+
+    labs(title = condition_name, x = "AAL ROI Number", y = NULL) +
+
+    theme_minimal(base_size = 15) +
+    theme(
+      plot.title   = element_text(face = "bold", size = 30, hjust = 0.5),
+      panel.grid   = element_blank(),
+      axis.text.y  = element_blank(),
+      axis.text.x  = element_text(size = 11, face = "bold"),
+      axis.title.x = element_text(size = 16, face = "bold"),
+      plot.margin  = margin(10, 10, 10, 40)
+    )
+
+  legend_grob <- make_extreme_legend_adult()
+
+  print(plot_grid(p, legend_grob, ncol = 2, rel_widths = c(1, 0.42)))
+
+  invisible(NULL)
+}
+
+
+for (condition_name in unique(na.omit(adults$ConditionName))) {
+  make_plot_adult(condition_name)
+  invisible(NULL)
+}
+```
