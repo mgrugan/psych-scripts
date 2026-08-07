@@ -25,6 +25,12 @@ export interface InteractiveSynapseNetworkProps {
   maxSynapses?: number
   /** Radius (px) around the cursor that excites a neuron */
   hoverRadius?: number
+  /**
+   * Change this to settle the network back to rest. Everything in flight is
+   * dropped and every neuron cools off, so the view starts as quiet as it does
+   * on a fresh load rather than carrying over whatever built up behind it.
+   */
+  settle?: number
   /** Opacity of the fading background trail (0-1) */
   trailOpacity?: number
   /** Overall opacity of the network, 0-1. Lower reads as further back. */
@@ -131,13 +137,14 @@ function brainPoint(i: number, n: number): [number, number, number] {
 const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
   children,
   phase = 'field',
+  settle = 0,
   nodeColor = '#ffffff',
   pulseColor = '#ffe08a',
   decayColor = '#ff3b2e',
   nodeCount = 130,
   connectionRadius = 190,
   maxSynapses = 4,
-  hoverRadius = 105,
+  hoverRadius = 130,
   trailOpacity = 0.24,
   intensity = 0.7,
   ariaLabel = 'Interactive neuron network',
@@ -147,12 +154,17 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const mouseRef = useRef({ x: -9999, y: -9999, active: false })
   const phaseRef = useRef<NetworkPhase>(phase)
+  const settleRef = useRef(settle)
   const rafRef = useRef<number | null>(null)
 
   // Phase changes must not tear down the simulation, so it is read from a ref.
   useEffect(() => {
     phaseRef.current = phase
   }, [phase])
+
+  useEffect(() => {
+    settleRef.current = settle
+  }, [settle])
 
   useEffect(() => {
     const wrap = wrapRef.current
@@ -289,7 +301,7 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
         if (this.refractory > 0) this.refractory--
 
         // Hovering the neuron is what fires it.
-        if (this.excite > 0.78 && this.refractory <= 0) {
+        if (this.excite > 0.55 && this.refractory <= 0) {
           fire(this, 1)
         }
 
@@ -376,7 +388,7 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
     const edges: Edge[] = []
     const brainEdges: Edge[] = []
     const spikes: Spike[] = []
-    const MAX_SPIKES = 90
+    const MAX_SPIKES = 340
 
     const control = (e: Edge) => {
       const dx = e.b.px - e.a.px
@@ -397,7 +409,7 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
 
     function fire(n: Neuron, energy: number) {
       n.flash = Math.max(n.flash, energy)
-      n.refractory = 110 + Math.floor(Math.random() * 70)
+      n.refractory = 48 + Math.floor(Math.random() * 34)
       if (energy < 0.16) return
 
       // Part way through a morph the two layouts disagree about where every
@@ -412,7 +424,7 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
 
       for (const ei of list) {
         if (spikes.length >= MAX_SPIKES) break
-        if (Math.random() > 0.4) continue
+        if (Math.random() > 0.82) continue
         const e = pool[ei]
         if (!e) continue
         const forward = e.a === n
@@ -424,7 +436,7 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
           forward,
           t: 0,
           speed: (0.012 + Math.random() * 0.012) * (calm ? 0.6 : 1),
-          energy: energy * (0.58 + Math.random() * 0.12),
+          energy: energy * (0.72 + Math.random() * 0.14),
         })
       }
     }
@@ -570,10 +582,26 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
 
     let idleFire = 0
     let wasBrain = false
+    let lastSettle = settleRef.current
 
     const animate = (time: number) => {
       // ease the morph toward whichever phase is active
       const target = phaseRef.current === 'brain' ? 1 : 0
+
+      // Asked to settle: drop everything in flight and let every neuron cool.
+      // Without this the view comes back carrying every cascade set off while it
+      // was hidden, which lands all at once the moment it is shown again.
+      if (settleRef.current !== lastSettle) {
+        lastSettle = settleRef.current
+        spikes.length = 0
+        for (const e of edges) e.heat = 0
+        for (const e of brainEdges) e.heat = 0
+        for (const n of neurons) {
+          n.excite = 0
+          n.flash = 0
+          n.refractory = 0
+        }
+      }
 
       // On a phase flip, anything still in flight belongs to the layout that is
       // leaving. Its endpoints are about to move across the whole viewport, so
@@ -652,7 +680,7 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
         if (s.t >= 1) {
           const target = s.forward ? e.b : e.a
           spikes.splice(i, 1)
-          if (target.refractory <= 0) fire(target, s.energy * 0.66)
+          if (target.refractory <= 0) fire(target, s.energy * 0.78)
           else target.flash = Math.max(target.flash, s.energy * 0.4)
         }
       }

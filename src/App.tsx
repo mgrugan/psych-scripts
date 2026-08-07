@@ -12,6 +12,8 @@ const App: React.FC = () => {
   const [phase, setPhase] = useState('queued')
   const [result, setResult] = useState<AnalysisResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /** bumped when the upload view comes back, to settle the network first */
+  const [settle, setSettle] = useState(0)
 
   useEffect(() => {
     checkEngine().then(setEngine)
@@ -34,7 +36,7 @@ const App: React.FC = () => {
   return (
     <>
       {/* The network gathers into a spinning brain while R is working. */}
-      <InteractiveSynapseNetwork phase={busy ? 'brain' : 'field'} />
+      <InteractiveSynapseNetwork phase={busy ? 'brain' : 'field'} settle={settle} />
 
       {/* keeps the type legible, and lifts out of the way of the brain */}
       <div
@@ -67,7 +69,13 @@ const App: React.FC = () => {
               </p>
             </div>
           ) : result ? (
-            <ResultsPanel result={result} onReset={() => setResult(null)} />
+            <ResultsPanel
+              result={result}
+              onReset={() => {
+                setResult(null)
+                setSettle((n) => n + 1)
+              }}
+            />
           ) : (
             <div className="grid h-full content-start items-center gap-10 overflow-y-auto py-2 lg:grid-cols-[1fr_minmax(0,440px)] lg:content-center lg:gap-14 lg:overflow-hidden lg:py-0">
               <section className="rise pt-6 lg:pt-0">
