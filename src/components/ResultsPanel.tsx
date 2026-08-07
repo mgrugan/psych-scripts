@@ -37,13 +37,13 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({ result, onReset }) => {
         <div className="flex items-center gap-2">
           <a
             href={`${plot.png}?download=1`}
-            className="rounded-full border border-white/25 px-5 py-2 text-[10px] font-light tracking-[0.18em] text-white/85 uppercase transition-all duration-300 hover:border-white/60 hover:text-white"
+            className="rounded-full border border-white/70 px-5 py-2 text-[10px] font-light tracking-[0.18em] text-white/85 uppercase transition-all duration-300 hover:border-white hover:text-white"
           >
             Png
           </a>
           <a
             href={`${plot.pdf}?download=1`}
-            className="rounded-full border border-white/25 px-5 py-2 text-[10px] font-light tracking-[0.18em] text-white/85 uppercase transition-all duration-300 hover:border-white/60 hover:text-white"
+            className="rounded-full border border-white/70 px-5 py-2 text-[10px] font-light tracking-[0.18em] text-white/85 uppercase transition-all duration-300 hover:border-white hover:text-white"
           >
             Pdf
           </a>
@@ -56,7 +56,7 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({ result, onReset }) => {
           <button
             type="button"
             onClick={onReset}
-            className="rounded-full border border-white/25 px-5 py-2 text-[10px] font-light tracking-[0.18em] text-white/75 uppercase transition-all duration-300 hover:border-white/60 hover:text-white"
+            className="rounded-full border border-white/70 px-5 py-2 text-[10px] font-light tracking-[0.18em] text-white/75 uppercase transition-all duration-300 hover:border-white hover:text-white"
           >
             New
           </button>
