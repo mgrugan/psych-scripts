@@ -226,7 +226,7 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
         const drift = calm ? 0 : 0.16
         this.vx = (Math.random() - 0.5) * drift
         this.vy = (Math.random() - 0.5) * drift
-        this.r = Math.random() * 1.7 + 1.6
+        this.r = Math.random() * 0.8 + 0.65
         this.squash = 0.62 + Math.random() * 0.3
         this.tilt = Math.random() * Math.PI
         this.phase = Math.random() * Math.PI * 2
@@ -237,7 +237,7 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
         for (let i = 0; i < spines; i++) {
           this.dendrites.push({
             angle: (i / spines) * Math.PI * 2 + Math.random() * 0.9,
-            len: this.r * (3.4 + Math.random() * 5.2),
+            len: 6 + Math.random() * 13,
             bend: (Math.random() - 0.5) * 0.9,
             sway: Math.random() * Math.PI * 2,
           })
@@ -324,7 +324,7 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
         }
 
         if (glow > 0.02) {
-          const rad = this.r * (5 + glow * 9)
+          const rad = (this.r + 1.1) * (4 + glow * 7)
           const g = ctx.createRadialGradient(this.px, this.py, 0, this.px, this.py, rad)
           g.addColorStop(0, rgba(col, 0.34 * glow * intensity))
           g.addColorStop(1, rgba(col, 0))
@@ -335,7 +335,7 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
         }
 
         const breathe = calm ? 1 : 1 + Math.sin(this.t * 0.0012 + this.phase) * 0.08
-        const rr = this.r * breathe * (1 + heatT * 0.7) * (1 - 0.15 * morph) * (morph ? this.depth : 1)
+        const rr = this.r * breathe * (1 + heatT * 0.5) * (1 - 0.15 * morph) * (morph ? this.depth : 1)
         ctx.beginPath()
         ctx.ellipse(this.px, this.py, rr, rr * this.squash, this.tilt, 0, Math.PI * 2)
         ctx.fillStyle = rgba(col, (0.28 + glow * 0.72) * intensity * Math.max(0.25, solid))
@@ -611,14 +611,14 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
         ctx.stroke()
 
         const head = pointOn(e, tt)
-        const hr = 1.6 + s.energy * 2.2
-        const g = ctx.createRadialGradient(head.x, head.y, 0, head.x, head.y, hr * 4)
+        const hr = 1.0 + s.energy * 1.4
+        const g = ctx.createRadialGradient(head.x, head.y, 0, head.x, head.y, hr * 3.6)
         g.addColorStop(0, rgba([255, 255, 255], 0.9 * intensity))
         g.addColorStop(0.35, rgba(col, 0.7 * intensity))
         g.addColorStop(1, rgba(col, 0))
         ctx.fillStyle = g
         ctx.beginPath()
-        ctx.arc(head.x, head.y, hr * 4, 0, Math.PI * 2)
+        ctx.arc(head.x, head.y, hr * 3.6, 0, Math.PI * 2)
         ctx.fill()
 
         if (s.t >= 1) {
