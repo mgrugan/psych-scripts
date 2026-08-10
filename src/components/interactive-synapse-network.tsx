@@ -250,6 +250,8 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
     let lightX = 0
     let lightY = 0
     const LIGHT_RADIUS = 460
+    /** The brain sits above centre so the quote beneath it stays clear. */
+    const BRAIN_CENTER_Y = 0.35
 
     /**
      * The pool of light is baked once into its own bitmap and then stamped each
@@ -393,7 +395,7 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
         // The shell is built with y pointing up; the canvas has it pointing
         // down, so it is flipped here. Without this the brain hangs upside
         // down and the lobes meant to tuck underneath float above the bulk.
-        const bpy = height / 2 - ry * brainScale * persp
+        const bpy = height * BRAIN_CENTER_Y - ry * brainScale * persp
 
         this.depth = persp
 
@@ -888,7 +890,7 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
       if (shown > 0.01) {
         const m = mouseRef.current
         lightX = m.active ? m.x : width / 2
-        lightY = m.active ? m.y : height * 0.38
+        lightY = m.active ? m.y : height * BRAIN_CENTER_Y
         if (!lightSprite) buildLightSprite()
         if (lightSprite) {
           ctx.globalCompositeOperation = 'lighter'

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react'
 
 interface LoadingDotsProps {
-  label: string
+  /** Optional wording ahead of the dots. Without it the dots stand alone. */
+  label?: string
   /** ms between each dot appearing */
   interval?: number
 }
@@ -18,8 +19,11 @@ const LoadingDots: React.FC<LoadingDotsProps> = ({ label, interval = 450 }) => {
   return (
     <span>
       {label}
-      {/* fixed width so the label never shifts as dots come and go */}
-      <span className="inline-block w-[2.2em] text-left" aria-hidden="true">
+      {/* fixed width so nothing shifts as the dots come and go */}
+      <span
+        className={`inline-block w-[2.2em] ${label ? 'text-left' : 'text-center'}`}
+        aria-hidden="true"
+      >
         {'.'.repeat(count)}
       </span>
       <span className="sr-only">working</span>

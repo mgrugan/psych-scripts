@@ -9,7 +9,6 @@ import type { Mode } from './lib/csv'
 const App: React.FC = () => {
   const [engine, setEngine] = useState<EngineHealth | null>(null)
   const [busy, setBusy] = useState(false)
-  const [phase, setPhase] = useState('queued')
   const [result, setResult] = useState<AnalysisResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   /** bumped when the upload view comes back, to settle the network first */
@@ -22,9 +21,8 @@ const App: React.FC = () => {
   const run = async (file: File, mode: Mode, topN: number) => {
     setBusy(true)
     setError(null)
-    setPhase('queued')
     try {
-      const res = await analyze(file, mode, topN, setPhase)
+      const res = await analyze(file, mode, topN)
       setResult(res)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'the analysis failed')
@@ -67,10 +65,8 @@ const App: React.FC = () => {
                   Carl Jung
                 </figcaption>
               </figure>
-              <p className="font-display text-[11px] font-light tracking-[0.4em] text-white/70 uppercase">
-                <LoadingDots
-                  label={phase === 'queued' ? 'Waiting for the engine' : 'Drawing your conditions'}
-                />
+              <p className="font-display text-[15px] font-light tracking-[0.5em] text-white/55">
+                <LoadingDots />
               </p>
             </div>
           ) : result ? (
