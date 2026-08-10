@@ -118,9 +118,11 @@ function brainPoint(i: number, n: number): BrainPoint {
     const [sx, sy, sz] = spherePoint(k, nCerebellum)
     const side = sx >= 0 ? 1 : -1
     const cx = side * 0.05
-    const cy = -0.42
-    const cz = -0.74
-    return [cx + sx * 0.36, cy + sy * 0.19, cz + sz * 0.26, cx, cy, cz]
+    const cy = -0.44
+    const cz = -0.76
+    // fine horizontal banding, the foliation that tells it apart from the bulk
+    const band = 0.022 * Math.sin(sy * 34)
+    return [cx + sx * (0.34 + band), cy + sy * 0.17, cz + sz * (0.24 + band), cx, cy, cz]
   }
 
   // ---- brain stem: a short column dropping away below the back ----
@@ -128,9 +130,9 @@ function brainPoint(i: number, n: number): BrainPoint {
     const k = i - nCerebrum - nTemporal - nCerebellum
     const t = (k + 0.5) / nStem
     const ring = k * 2.399963229728653
-    const rad = 0.115 * (1 - t * 0.45)
-    const cy = -0.34 - t * 0.42
-    const cz = -0.34 - t * 0.16
+    const rad = 0.085 * (1 - t * 0.35)
+    const cy = -0.34 - t * 0.5
+    const cz = -0.3 + t * 0.06
     return [Math.cos(ring) * rad, cy, cz + Math.sin(ring) * rad, 0, cy, cz]
   }
 
@@ -162,8 +164,18 @@ function brainPoint(i: number, n: number): BrainPoint {
   const fissure = Math.max(0, Math.min(1, (uy + 0.02) / 0.5))
   ux += side * 0.085 * fissure
 
-  // gyri, just enough surface ripple to avoid reading as a smooth egg
-  const ripple = 0.045 * Math.sin(ux * 13) * Math.cos(uz * 10) + 0.03 * Math.sin(uy * 15)
+  // The lateral fissure, the deep groove that separates the temporal lobe from
+  // everything above it. It is the most legible landmark on a brain seen from
+  // the side, so it is cut in rather than left to the ripple.
+  const sylvian = Math.exp(-Math.pow((uy - 0.01) / 0.085, 2))
+  ux *= 1 - 0.15 * sylvian
+  uy -= 0.025 * sylvian
+
+  // gyri: deeper and finer than a gentle wobble, so the surface reads as folded
+  const ripple =
+    0.055 * Math.sin(ux * 17) * Math.cos(uz * 13) +
+    0.04 * Math.sin(uy * 19 + uz * 5) +
+    0.025 * Math.cos(ux * 24 + uy * 9)
   const len = Math.hypot(ux, uy - 0.16, uz) || 1
   ux += (ux / len) * ripple
   uy += ((uy - 0.16) / len) * ripple
@@ -233,6 +245,34 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
     let spinCos = 1
     let spinSin = 0
     let brainScale = 1
+    // The cursor becomes a light source once the neurons gather, so moving it
+    // sweeps across the surface instead of firing anything.
+    let lightX = 0
+    let lightY = 0
+    const LIGHT_RADIUS = 460
+
+    /**
+     * The pool of light is baked once into its own bitmap and then stamped each
+     * frame. Evaluating a radial gradient across a few million pixels every
+     * frame was costing about a third of the frame budget on its own.
+     */
+    let lightSprite: HTMLCanvasElement | null = null
+    const buildLightSprite = () => {
+      const px = Math.round(LIGHT_RADIUS * 2 * dpr)
+      const c = document.createElement('canvas')
+      c.width = px
+      c.height = px
+      const g2 = c.getContext('2d')
+      if (!g2) return
+      const r = px / 2
+      const grad = g2.createRadialGradient(r, r, 0, r, r, r)
+      grad.addColorStop(0, 'rgba(255,236,198,0.5)')
+      grad.addColorStop(0.4, 'rgba(255,214,150,0.17)')
+      grad.addColorStop(1, 'rgba(255,214,150,0)')
+      g2.fillStyle = grad
+      g2.fillRect(0, 0, px, px)
+      lightSprite = c
+    }
     const TILT_COS = Math.cos(0.32)
     const TILT_SIN = Math.sin(0.32)
 
@@ -268,6 +308,9 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
       nz = 0
       /** 1 when the surface points straight at the viewer, 0 when edge on */
       facing = 1
+      /** that same normal in screen space, for shading against the cursor */
+      snx = 0
+      sny = 0
       /** where this neuron is actually drawn this frame */
       px = 0
       py = 0
@@ -337,8 +380,13 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
 
         // The normal goes through the same rotation. Nearer is more negative in
         // z, so a surface faces the viewer when its turned normal does too.
+        const mx = this.nx * spinCos + this.nz * spinSin
         const mz = -this.nx * spinSin + this.nz * spinCos
+        const my = this.ny * TILT_COS - mz * TILT_SIN
         this.facing = -(this.ny * TILT_SIN + mz * TILT_COS)
+        // screen space, where y runs the other way
+        this.snx = mx
+        this.sny = -my
 
         const persp = 3.1 / (3.1 + rz)
         const bpx = width / 2 + rx * brainScale * persp
@@ -397,20 +445,6 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
         // Shell points are the surface itself, so they get their own weighting
         // rather than the field's: a plain dot, bright at the front of the
         // volume and dropping away toward the back.
-        if (this.shell) {
-          // Anything on the far side of the volume is dropped, which is what
-          // gives the silhouette an edge instead of letting the back surface
-          // show through and fill it in.
-          if (this.facing <= 0.02) return
-          const lit = Math.pow(this.facing, 0.55)
-          const rr = (1.0 + this.r * 0.4) * this.depth * (1 + heatT * 0.6)
-          ctx.beginPath()
-          ctx.arc(this.px, this.py, rr, 0, Math.PI * 2)
-          ctx.fillStyle = rgba(col, (0.26 + lit * 0.74) * present)
-          ctx.fill()
-          return
-        }
-
         const dendAlpha = (0.13 + glow * 0.62) * intensity * Math.max(0.15, solid) * present * (1 - shown)
         if (!this.shell && dendAlpha > 0.012) {
           ctx.lineWidth = 0.7
@@ -433,15 +467,35 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
           }
         }
 
+        // A tight bloom rather than the wide soft ball it used to be. Wide and
+        // soft reads as an orb; this reads as something charged.
         if (glow > 0.02) {
-          const rad = (this.r + 1.1) * (4 + glow * 7)
+          const rad = (this.r + 0.5) * (1.8 + glow * 3.2)
           const g = ctx.createRadialGradient(this.px, this.py, 0, this.px, this.py, rad)
-          g.addColorStop(0, rgba(col, 0.34 * glow * intensity * present))
+          g.addColorStop(0, rgba(col, 0.42 * glow * intensity * present))
+          g.addColorStop(0.5, rgba(col, 0.14 * glow * intensity * present))
           g.addColorStop(1, rgba(col, 0))
           ctx.fillStyle = g
           ctx.beginPath()
           ctx.arc(this.px, this.py, rad, 0, Math.PI * 2)
           ctx.fill()
+        }
+
+        // Firing throws off a short spark, angled per neuron so the whole field
+        // does not flash the same cross.
+        if (heatT > 0.06) {
+          const arm = (2.5 + heatT * 9) * (1 - 0.5 * morph)
+          const jitter = 0.85 + Math.random() * 0.3
+          ctx.lineWidth = 0.7
+          ctx.strokeStyle = rgba(mix(col, [255, 255, 255], 0.5), Math.min(0.9, heatT) * intensity * present)
+          ctx.beginPath()
+          for (let k = 0; k < 4; k++) {
+            const a2 = this.tilt + (k * Math.PI) / 2
+            const len = arm * (k % 2 ? jitter : 1)
+            ctx.moveTo(this.px, this.py)
+            ctx.lineTo(this.px + Math.cos(a2) * len, this.py + Math.sin(a2) * len)
+          }
+          ctx.stroke()
         }
 
         const breathe = calm ? 1 : 1 + Math.sin(this.t * 0.0012 + this.phase) * 0.08
@@ -453,14 +507,14 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
           (morph ? this.depth : 1) *
           (this.shell ? 0.8 : 1)
         ctx.beginPath()
-        ctx.ellipse(this.px, this.py, rr, rr * this.squash, this.tilt, 0, Math.PI * 2)
-        ctx.fillStyle = rgba(col, (0.28 + glow * 0.72) * intensity * Math.max(0.12, solid) * present)
+        ctx.ellipse(this.px, this.py, rr * 0.85, rr * 0.85 * this.squash, this.tilt, 0, Math.PI * 2)
+        ctx.fillStyle = rgba(col, (0.34 + glow * 0.66) * intensity * Math.max(0.12, solid) * present)
         ctx.fill()
 
-        if (heatT > 0.25) {
+        if (heatT > 0.12) {
           ctx.beginPath()
-          ctx.arc(this.px, this.py, rr * 0.45, 0, Math.PI * 2)
-          ctx.fillStyle = rgba([255, 255, 255], Math.min(0.85, heatT) * intensity * present)
+          ctx.arc(this.px, this.py, rr * 0.42, 0, Math.PI * 2)
+          ctx.fillStyle = rgba([255, 255, 255], Math.min(0.95, heatT * 1.3) * intensity * present)
           ctx.fill()
         }
       }
@@ -484,6 +538,8 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
     }
 
     const neurons: Neuron[] = []
+    /** neurons[0..fieldCount-1] are the field; the rest are surface only */
+    let fieldCount = 0
     const edges: Edge[] = []
     const brainEdges: Edge[] = []
     const spikes: Spike[] = []
@@ -534,7 +590,7 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
           brain: useBrain,
           forward,
           t: 0,
-          speed: (0.012 + Math.random() * 0.012) * (calm ? 0.6 : 1),
+          speed: (0.022 + Math.random() * 0.02) * (calm ? 0.6 : 1),
           energy: energy * (0.72 + Math.random() * 0.14),
         })
       }
@@ -551,6 +607,7 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
         Math.round(nodeCount * Math.min(1.35, (width * height) / (1440 * 900)))
       )
       for (let i = 0; i < count; i++) neurons.push(new Neuron())
+      fieldCount = count
 
       // Extra points that only appear once gathered. A brain needs a far denser
       // surface than the field wants, and this keeps the two independent.
@@ -650,6 +707,7 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
           n.y *= sy
         }
       }
+      lightSprite = null
       ctx.fillStyle = '#000'
       ctx.fillRect(0, 0, width, height)
     }
@@ -699,6 +757,64 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
           ctx.lineWidth = 0.6
           e.heat *= 0.945
         }
+      }
+    }
+
+    /**
+     * The surface runs to well over a thousand points, and giving each one its
+     * own fill was the single most expensive thing on the frame. They are
+     * bucketed by brightness instead and drawn as a handful of batched paths.
+     */
+    const SHELL_BUCKETS = 9
+    const shellBatch: number[][] = Array.from(
+      { length: SHELL_BUCKETS * 2 },
+      () => [] as number[]
+    )
+    const WARM: RGB = mix(REST, HOT, 0.4)
+
+    const drawShell = () => {
+      const reach2 = LIGHT_RADIUS * LIGHT_RADIUS
+
+      for (let i = fieldCount; i < neurons.length; i++) {
+        const n = neurons[i]
+        // the far side of the volume is dropped, which is what gives the
+        // silhouette an edge instead of letting the back fill it in
+        if (n.facing <= 0.02) continue
+
+        const dx = lightX - n.px
+        const dy = lightY - n.py
+        const d2 = dx * dx + dy * dy
+        let beam = 0
+        if (d2 < reach2) {
+          const dist = Math.sqrt(d2) || 1
+          const diffuse = Math.max(0, (n.snx * dx + n.sny * dy) / dist)
+          beam = (1 - dist / LIGHT_RADIUS) * (0.25 + diffuse * 0.75)
+        }
+
+        const alpha = Math.min(1, 0.18 + Math.sqrt(n.facing) * 0.5 + beam * 0.75) * shown
+        if (alpha < 0.02) continue
+
+        const bucket =
+          (beam > 0.06 ? SHELL_BUCKETS : 0) +
+          Math.min(SHELL_BUCKETS - 1, (alpha * SHELL_BUCKETS) | 0)
+        const arr = shellBatch[bucket]
+        arr.push(n.px, n.py, (1.0 + n.r * 0.4) * n.depth * (1 + beam * 0.5))
+      }
+
+      for (let k = 0; k < shellBatch.length; k++) {
+        const arr = shellBatch[k]
+        if (arr.length === 0) continue
+        const warm = k >= SHELL_BUCKETS
+        const a = ((k % SHELL_BUCKETS) + 0.5) / SHELL_BUCKETS
+        ctx.beginPath()
+        for (let j = 0; j < arr.length; j += 3) {
+          // moveTo first, or every dot is joined to the last one
+          ctx.moveTo(arr[j] + arr[j + 2], arr[j + 1])
+          ctx.arc(arr[j], arr[j + 1], arr[j + 2], 0, Math.PI * 2)
+        }
+        ctx.fillStyle = rgba(warm ? WARM : REST, a)
+        ctx.fill()
+        arr.length = 0
       }
     }
 
@@ -752,20 +868,50 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
       // The comet trail is what gives the scattered field its motion, but on a
       // turning brain it just smears the surface, so it is wound back as the
       // neurons gather.
-      ctx.fillStyle = `rgba(0,0,0,${trailOpacity + morph * (0.85 - trailOpacity)})`
+      // Fully gathered the fade is so close to opaque that the alpha blend is
+      // wasted work, and an opaque fill is markedly cheaper across a full
+      // retina canvas every frame.
+      if (morph > 0.92) {
+        ctx.fillStyle = '#000'
+      } else {
+        ctx.fillStyle = `rgba(0,0,0,${trailOpacity + morph * (0.85 - trailOpacity)})`
+      }
       ctx.fillRect(0, 0, width, height)
 
       // positions first, so every edge is drawn against fresh coordinates
       for (const n of neurons) n.update(time)
 
       shown = easeInOut(morph)
+
+      // A pool of light under the cursor. Only while gathered: on the open
+      // field the cursor already has a job.
+      if (shown > 0.01) {
+        const m = mouseRef.current
+        lightX = m.active ? m.x : width / 2
+        lightY = m.active ? m.y : height * 0.38
+        if (!lightSprite) buildLightSprite()
+        if (lightSprite) {
+          ctx.globalCompositeOperation = 'lighter'
+          ctx.globalAlpha = 0.22 * shown
+          ctx.drawImage(
+            lightSprite,
+            lightX - LIGHT_RADIUS,
+            lightY - LIGHT_RADIUS,
+            LIGHT_RADIUS * 2,
+            LIGHT_RADIUS * 2
+          )
+          ctx.globalAlpha = 1
+          ctx.globalCompositeOperation = 'source-over'
+        }
+      }
+
       drawEdges(edges, 1 - shown)
       drawEdges(brainEdges, shown)
 
       // Gathered up there is no cursor to excite anything, so it fires itself.
       if (morph > 0.6 && time - idleFire > 430) {
         idleFire = time
-        const n = neurons[Math.floor(Math.random() * neurons.length)]
+        const n = neurons[Math.floor(Math.random() * fieldCount)]
         if (n && n.refractory <= 0) fire(n, 0.95)
       }
 
@@ -780,29 +926,62 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
         const vis = s.brain ? shown : 1 - shown
         if (vis <= 0.02) continue
 
-        const tail = 0.3
-        ctx.lineWidth = 1 + s.energy * 1.6
-        ctx.beginPath()
-        const steps = 8
+        // A bolt rather than a comet: the path is kinked off the synapse a
+        // little, redrawn each frame so it crackles, then struck twice. A wide
+        // coloured pass for the discharge around it, a thin near white pass for
+        // the core of the arc itself.
+        const tail = 0.26
+        const steps = 9
+        const pts: { x: number; y: number }[] = []
         for (let k = 0; k <= steps; k++) {
           const p = s.t - (tail * k) / steps
           if (p < 0) break
           const q = pointOn(e, s.forward ? p : 1 - p)
-          if (k === 0) ctx.moveTo(q.x, q.y)
-          else ctx.lineTo(q.x, q.y)
+          pts.push(q)
         }
-        ctx.strokeStyle = rgba(col, 0.5 * s.energy * intensity * vis)
-        ctx.stroke()
+        if (pts.length > 1) {
+          // kink each interior point across the line of travel
+          for (let k = 1; k < pts.length - 1; k++) {
+            const a0 = pts[k - 1]
+            const b0 = pts[k + 1]
+            const dx = b0.x - a0.x
+            const dy = b0.y - a0.y
+            const len = Math.hypot(dx, dy) || 1
+            const amp = (Math.random() - 0.5) * 5 * s.energy * (1 - k / pts.length)
+            pts[k] = { x: pts[k].x + (-dy / len) * amp, y: pts[k].y + (dx / len) * amp }
+          }
 
+          const trace = () => {
+            ctx.beginPath()
+            ctx.moveTo(pts[0].x, pts[0].y)
+            for (let k = 1; k < pts.length; k++) ctx.lineTo(pts[k].x, pts[k].y)
+            ctx.stroke()
+          }
+
+          ctx.lineCap = 'round'
+          ctx.lineJoin = 'round'
+          ctx.lineWidth = 2.2 + s.energy * 2.2
+          ctx.strokeStyle = rgba(col, 0.16 * s.energy * intensity * vis)
+          trace()
+          ctx.lineWidth = 0.8
+          ctx.strokeStyle = rgba(mix(col, [255, 255, 255], 0.65), 0.9 * s.energy * intensity * vis)
+          trace()
+        }
+
+        // the leading tip: a hard point with a short cross flare
         const head = pointOn(e, tt)
-        const hr = 1.0 + s.energy * 1.4
-        const g = ctx.createRadialGradient(head.x, head.y, 0, head.x, head.y, hr * 3.6)
-        g.addColorStop(0, rgba([255, 255, 255], 0.9 * intensity * vis))
-        g.addColorStop(0.35, rgba(col, 0.7 * intensity * vis))
-        g.addColorStop(1, rgba(col, 0))
-        ctx.fillStyle = g
+        const flare = (1.8 + s.energy * 3.4) * vis
+        ctx.lineWidth = 0.7
+        ctx.strokeStyle = rgba(col, 0.55 * s.energy * intensity * vis)
         ctx.beginPath()
-        ctx.arc(head.x, head.y, hr * 3.6, 0, Math.PI * 2)
+        ctx.moveTo(head.x - flare, head.y)
+        ctx.lineTo(head.x + flare, head.y)
+        ctx.moveTo(head.x, head.y - flare)
+        ctx.lineTo(head.x, head.y + flare)
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.arc(head.x, head.y, 0.9 + s.energy * 0.9, 0, Math.PI * 2)
+        ctx.fillStyle = rgba([255, 255, 255], 0.95 * intensity * vis)
         ctx.fill()
 
         if (s.t >= 1) {
@@ -813,7 +992,10 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
         }
       }
 
-      for (const n of neurons) n.draw()
+      if (shown > 0.01) drawShell()
+      for (const n of neurons) {
+        if (!n.shell) n.draw()
+      }
 
       rafRef.current = requestAnimationFrame(animate)
     }

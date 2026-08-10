@@ -57,8 +57,12 @@ const App: React.FC = () => {
 
         <main className="mx-auto w-full max-w-6xl min-h-0 flex-1 px-6 sm:px-10">
           {busy ? (
-            <div className="flex h-full items-end justify-center pb-16">
-              <p className="font-display text-[12px] font-light tracking-[0.4em] text-white/90 uppercase">
+            <div className="flex h-full flex-col items-center justify-end gap-7 pb-12 text-center">
+              <blockquote className="font-display max-w-2xl text-[clamp(0.95rem,1.6vw,1.2rem)] leading-[1.9] font-extralight tracking-wide text-white/85">
+                &ldquo;One does not become enlightened by imagining figures of light, but by
+                making the darkness conscious.&rdquo;
+              </blockquote>
+              <p className="font-display text-[11px] font-light tracking-[0.4em] text-white/70 uppercase">
                 <LoadingDots
                   label={phase === 'queued' ? 'Waiting for the engine' : 'Drawing your conditions'}
                 />
