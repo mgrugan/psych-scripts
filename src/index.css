@@ -84,6 +84,20 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.65);
 }
 
+/* Wordmark: bright at the top, falling away toward the baseline. */
+.gradient-text {
+  background: linear-gradient(
+    170deg,
+    #ffffff 0%,
+    #ffffff 34%,
+    rgba(255, 255, 255, 0.58) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
 .hairline {
   background: linear-gradient(
     90deg,

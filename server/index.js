@@ -276,7 +276,7 @@ app.get('/api/jobs/:id/archive', (req, res) => {
   const dir = path.join(JOBS, id, 'out')
   if (!fs.existsSync(dir)) return res.status(404).json({ error: 'not found' })
 
-  res.attachment(`fnsw-plots-${id.slice(0, 8)}.zip`)
+  res.attachment(`mosaic-plots-${id.slice(0, 8)}.zip`)
   const archive = new ZipArchive({ zlib: { level: 9 } })
   archive.on('error', () => res.destroy())
   archive.pipe(res)

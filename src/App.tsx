@@ -82,10 +82,10 @@ const App: React.FC = () => {
                 <p className="text-[10px] font-medium tracking-widest-xl text-white/70 uppercase">
                   AAL region atlas
                 </p>
-                <h1 className="font-display mt-5 text-[clamp(2.2rem,5vw,3.9rem)] leading-[0.98] font-extralight tracking-[-0.035em] text-white">
-                  Where the
+                <h1 className="font-display gradient-text mt-5 text-[clamp(2.2rem,5vw,3.9rem)] leading-[0.98] font-extralight tracking-[-0.035em]">
+                  The Mosaic
                   <br />
-                  <span className="font-light text-white/75">signal splits.</span>
+                  <span className="font-light">Project</span>
                 </h1>
                 <p className="mt-6 max-w-md text-[13px] leading-[1.8] font-light tracking-wide text-white/85">
                   Upload a sheet of AAL ROI values. The pipeline ranks every region by its
