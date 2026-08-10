@@ -52,11 +52,7 @@ const App: React.FC = () => {
 
       <div className="relative z-10 flex h-screen flex-col">
         <header className="mx-auto flex w-full max-w-6xl shrink-0 items-center px-6 py-6 sm:px-10">
-          <svg viewBox="0 0 32 32" className="h-5 w-5 text-white/80" aria-hidden="true">
-            <circle cx="16" cy="16" r="3" fill="currentColor" opacity="0.9" />
-            <circle cx="16" cy="16" r="9.5" fill="none" stroke="currentColor" strokeWidth="0.6" opacity="0.55" />
-            <circle cx="16" cy="16" r="14.5" fill="none" stroke="currentColor" strokeWidth="0.5" opacity="0.25" />
-          </svg>
+          <img src="/icons/brain.png" alt="" aria-hidden="true" className="h-7 w-7 opacity-90" />
         </header>
 
         <main className="mx-auto w-full max-w-6xl min-h-0 flex-1 px-6 sm:px-10">
@@ -79,7 +75,8 @@ const App: React.FC = () => {
           ) : (
             <div className="grid h-full content-start items-center gap-10 overflow-y-auto py-2 lg:grid-cols-[1fr_minmax(0,440px)] lg:content-center lg:gap-14 lg:overflow-hidden lg:py-0">
               <section className="rise pt-6 lg:pt-0">
-                <p className="text-[10px] font-medium tracking-widest-xl text-white/70 uppercase">
+                <p className="flex items-center gap-2.5 text-[10px] font-medium tracking-widest-xl text-white/70 uppercase">
+                  <img src="/icons/mosaic.png" alt="" aria-hidden="true" className="h-3 w-3 opacity-80" />
                   AAL region atlas
                 </p>
                 <h1 className="font-display gradient-text mt-5 text-[clamp(2.2rem,5vw,3.9rem)] leading-[0.98] font-extralight tracking-[-0.035em]">

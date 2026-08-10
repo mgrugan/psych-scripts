@@ -81,57 +81,95 @@ function spherePoint(i: number, n: number): [number, number, number] {
 }
 
 /**
- * A point on a brain-shaped shell.
+ * A point on a brain-shaped shell, returned as position followed by the centre
+ * of the lobe it belongs to. The centre gives the outward normal, which is what
+ * lets the far side of the volume be culled so the thing reads as a solid
+ * surface rather than a cloud you can see straight through.
  *
- * The last slice of the points form the cerebellum, a separate lobe tucked
- * under the back. The rest are the cerebrum: an ellipsoid longer front to back
- * than it is tall, tapered at both poles, flattened underneath, and parted down
- * the middle by a fissure that only opens along the top.
+ * Built as four parts rather than one lump, because a single ellipsoid reads as
+ * an egg from every angle. What makes a side view legible as a brain is the
+ * temporal lobe: a smaller lobe slung low and forward beneath the cerebrum,
+ * leaving a notch between the two. The cerebellum sits under the back and the
+ * stem drops away below it.
  */
-function brainPoint(i: number, n: number): [number, number, number] {
-  const cerebellumFrom = Math.floor(n * 0.84)
+type BrainPoint = [number, number, number, number, number, number]
 
-  if (i >= cerebellumFrom) {
-    const k = i - cerebellumFrom
-    const count = Math.max(1, n - cerebellumFrom)
-    let [sx, sy, sz] = spherePoint(k, count)
-    const side = sx >= 0 ? 1 : -1
-    return [
-      sx * 0.42 + side * 0.06,
-      sy * 0.19 - 0.40,
-      sz * 0.27 - 0.68,
-    ]
+function brainPoint(i: number, n: number): BrainPoint {
+  const nCerebrum = Math.round(n * 0.54)
+  const nTemporal = Math.round(n * 0.2)
+  const nCerebellum = Math.round(n * 0.17)
+  const nStem = Math.max(1, n - nCerebrum - nTemporal - nCerebellum)
+
+  // ---- temporal lobes: the shape that makes the profile read as a brain ----
+  if (i >= nCerebrum && i < nCerebrum + nTemporal) {
+    const k = i - nCerebrum
+    const perSide = Math.max(1, Math.round(nTemporal / 2))
+    const side = k < perSide ? 1 : -1
+    const [sx, sy, sz] = spherePoint(k % perSide, perSide)
+    const cx = side * 0.34
+    const cy = -0.34
+    const cz = 0.1
+    return [cx + side * sx * 0.14, cy + sy * 0.17, cz + sz * 0.52, cx, cy, cz]
   }
 
-  let [ux, uy, uz] = spherePoint(i, cerebellumFrom)
+  // ---- cerebellum: under the back, in two small halves ----
+  if (i >= nCerebrum + nTemporal && i < nCerebrum + nTemporal + nCerebellum) {
+    const k = i - nCerebrum - nTemporal
+    const [sx, sy, sz] = spherePoint(k, nCerebellum)
+    const side = sx >= 0 ? 1 : -1
+    const cx = side * 0.05
+    const cy = -0.42
+    const cz = -0.74
+    return [cx + sx * 0.36, cy + sy * 0.19, cz + sz * 0.26, cx, cy, cz]
+  }
 
-  // proportions: narrow across, tallest in the middle, longest front to back
-  ux *= 0.78
-  uy *= 0.60
-  uz *= 1.14
+  // ---- brain stem: a short column dropping away below the back ----
+  if (i >= nCerebrum + nTemporal + nCerebellum) {
+    const k = i - nCerebrum - nTemporal - nCerebellum
+    const t = (k + 0.5) / nStem
+    const ring = k * 2.399963229728653
+    const rad = 0.115 * (1 - t * 0.45)
+    const cy = -0.34 - t * 0.42
+    const cz = -0.34 - t * 0.16
+    return [Math.cos(ring) * rad, cy, cz + Math.sin(ring) * rad, 0, cy, cz]
+  }
+
+  // ---- cerebrum: the bulk above everything else ----
+  let [ux, uy, uz] = spherePoint(i, nCerebrum)
+
+  ux *= 0.62
+  uy *= 0.56
+  uz *= 1.0
 
   // taper the frontal and occipital poles
-  const taper = 1 - 0.2 * uz * uz
+  const taper = 1 - 0.22 * uz * uz
   ux *= taper
   uy *= taper
 
-  // flatten the underside, a brain does not hang below like a sphere
-  if (uy < 0) uy *= 0.78
+  // Squeeze the underside in as well as flatten it, so the temporal lobes are
+  // left standing proud of it rather than buried inside.
+  if (uy < 0) {
+    uy *= 0.72
+    ux *= 0.82
+  }
+
+  // sits above the lobes slung beneath it
+  uy += 0.16
 
   // The longitudinal fissure parts the hemispheres along the top only, so the
   // underside stays closed instead of notching into a heart.
   const side = ux >= 0 ? 1 : -1
-  const fissure = Math.max(0, Math.min(1, (uy + 0.1) / 0.5))
-  ux += side * 0.09 * fissure
+  const fissure = Math.max(0, Math.min(1, (uy + 0.02) / 0.5))
+  ux += side * 0.085 * fissure
 
   // gyri, just enough surface ripple to avoid reading as a smooth egg
-  const ripple = 0.04 * Math.sin(ux * 12) * Math.cos(uz * 9) + 0.025 * Math.sin(uy * 14)
-  const len = Math.hypot(ux, uy, uz) || 1
+  const ripple = 0.045 * Math.sin(ux * 13) * Math.cos(uz * 10) + 0.03 * Math.sin(uy * 15)
+  const len = Math.hypot(ux, uy - 0.16, uz) || 1
   ux += (ux / len) * ripple
-  uy += (uy / len) * ripple
+  uy += ((uy - 0.16) / len) * ripple
   uz += (uz / len) * ripple
 
-  return [ux, uy, uz]
+  return [ux, uy, uz, 0, 0.16, 0]
 }
 
 const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
@@ -187,7 +225,16 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
 
     /** 0 = scattered field, 1 = fully gathered brain. */
     let morph = 0
+    /** eased morph, what the drawing actually uses */
+    let shown = 0
     let spin = 0
+    // Recomputed once a frame rather than once per neuron, which matters now
+    // that the shell runs to well over a thousand points.
+    let spinCos = 1
+    let spinSin = 0
+    let brainScale = 1
+    const TILT_COS = Math.cos(0.32)
+    const TILT_SIN = Math.sin(0.32)
 
     /**
      * Signal colour: yellow at the source, sliding to red as the pulse loses
@@ -215,6 +262,12 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
       bx = 0
       by = 0
       bz = 0
+      /** outward surface normal at that position, before rotation */
+      nx = 0
+      ny = 0
+      nz = 0
+      /** 1 when the surface points straight at the viewer, 0 when edge on */
+      facing = 1
       /** where this neuron is actually drawn this frame */
       px = 0
       py = 0
@@ -231,6 +284,12 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
       refractory = 0
       phase: number
       t = 0
+      /**
+       * Shell neurons exist only to give the gathered brain a surface dense
+       * enough to read. They never join the scattered field, so the field keeps
+       * exactly the density it had.
+       */
+      shell = false
 
       constructor() {
         this.x = Math.random() * width
@@ -258,8 +317,9 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
 
       update(t: number) {
         // Gathered up, the field position is parked so the neurons come back to
-        // where they left rather than somewhere else entirely.
-        const loose = 1 - morph
+        // where they left rather than somewhere else entirely. Shell neurons
+        // have no field position to keep.
+        const loose = this.shell ? 0 : 1 - morph
         this.x += this.vx * loose
         this.y += this.vy * loose
         if (this.x < 4 || this.x > width - 4) this.vx *= -1
@@ -268,23 +328,36 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
         this.y = Math.max(4, Math.min(height - 4, this.y))
 
         // Rotate the brain position and project it, then blend the two layouts.
-        const cos = Math.cos(spin)
-        const sin = Math.sin(spin)
-        const rx = this.bx * cos + this.bz * sin
-        let rz = -this.bx * sin + this.bz * cos
+        const rx = this.bx * spinCos + this.bz * spinSin
+        let rz = -this.bx * spinSin + this.bz * spinCos
 
         // a slight tilt so the brain is seen from just above, not edge on
-        const tc = Math.cos(0.32)
-        const ts = Math.sin(0.32)
-        const ry = this.by * tc - rz * ts
-        rz = this.by * ts + rz * tc
+        const ry = this.by * TILT_COS - rz * TILT_SIN
+        rz = this.by * TILT_SIN + rz * TILT_COS
 
-        const scale = Math.min(width, height) * 0.34
+        // The normal goes through the same rotation. Nearer is more negative in
+        // z, so a surface faces the viewer when its turned normal does too.
+        const mz = -this.nx * spinSin + this.nz * spinCos
+        this.facing = -(this.ny * TILT_SIN + mz * TILT_COS)
+
         const persp = 3.1 / (3.1 + rz)
-        const bpx = width / 2 + rx * scale * persp
-        const bpy = height / 2 + ry * scale * persp
+        const bpx = width / 2 + rx * brainScale * persp
+        // The shell is built with y pointing up; the canvas has it pointing
+        // down, so it is flipped here. Without this the brain hangs upside
+        // down and the lobes meant to tuck underneath float above the bulk.
+        const bpy = height / 2 - ry * brainScale * persp
 
         this.depth = persp
+
+        if (this.shell) {
+          this.px = bpx
+          this.py = bpy
+          this.flash *= 0.9
+          if (this.flash < 0.001) this.flash = 0
+          this.t = t
+          return
+        }
+
         this.px = this.x + (bpx - this.x) * morph
         this.py = this.y + (bpy - this.y) * morph
 
@@ -316,10 +389,30 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
         const col = heatT > 0.01 ? mix(REST, heat(heatT), Math.min(1, heatT * 1.5)) : REST
 
         // Gathered into the brain, depth does the work the cursor did before.
-        const solid = 1 - morph + morph * (0.35 + (this.depth - 0.72) * 1.5)
+        const solid = 1 - morph + morph * (0.12 + (this.depth - 0.7) * 1.9)
+        // a shell point has nothing to show until the brain forms
+        const present = this.shell ? shown : 1
+        if (present < 0.01) return
 
-        const dendAlpha = (0.13 + glow * 0.62) * intensity * Math.max(0.2, solid)
-        if (dendAlpha > 0.012) {
+        // Shell points are the surface itself, so they get their own weighting
+        // rather than the field's: a plain dot, bright at the front of the
+        // volume and dropping away toward the back.
+        if (this.shell) {
+          // Anything on the far side of the volume is dropped, which is what
+          // gives the silhouette an edge instead of letting the back surface
+          // show through and fill it in.
+          if (this.facing <= 0.02) return
+          const lit = Math.pow(this.facing, 0.55)
+          const rr = (1.0 + this.r * 0.4) * this.depth * (1 + heatT * 0.6)
+          ctx.beginPath()
+          ctx.arc(this.px, this.py, rr, 0, Math.PI * 2)
+          ctx.fillStyle = rgba(col, (0.26 + lit * 0.74) * present)
+          ctx.fill()
+          return
+        }
+
+        const dendAlpha = (0.13 + glow * 0.62) * intensity * Math.max(0.15, solid) * present * (1 - shown)
+        if (!this.shell && dendAlpha > 0.012) {
           ctx.lineWidth = 0.7
           ctx.strokeStyle = rgba(col, dendAlpha)
           for (const d of this.dendrites) {
@@ -343,7 +436,7 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
         if (glow > 0.02) {
           const rad = (this.r + 1.1) * (4 + glow * 7)
           const g = ctx.createRadialGradient(this.px, this.py, 0, this.px, this.py, rad)
-          g.addColorStop(0, rgba(col, 0.34 * glow * intensity))
+          g.addColorStop(0, rgba(col, 0.34 * glow * intensity * present))
           g.addColorStop(1, rgba(col, 0))
           ctx.fillStyle = g
           ctx.beginPath()
@@ -352,16 +445,22 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
         }
 
         const breathe = calm ? 1 : 1 + Math.sin(this.t * 0.0012 + this.phase) * 0.08
-        const rr = this.r * breathe * (1 + heatT * 0.5) * (1 - 0.15 * morph) * (morph ? this.depth : 1)
+        const rr =
+          this.r *
+          breathe *
+          (1 + heatT * 0.5) *
+          (1 - 0.15 * morph) *
+          (morph ? this.depth : 1) *
+          (this.shell ? 0.8 : 1)
         ctx.beginPath()
         ctx.ellipse(this.px, this.py, rr, rr * this.squash, this.tilt, 0, Math.PI * 2)
-        ctx.fillStyle = rgba(col, (0.28 + glow * 0.72) * intensity * Math.max(0.25, solid))
+        ctx.fillStyle = rgba(col, (0.28 + glow * 0.72) * intensity * Math.max(0.12, solid) * present)
         ctx.fill()
 
         if (heatT > 0.25) {
           ctx.beginPath()
           ctx.arc(this.px, this.py, rr * 0.45, 0, Math.PI * 2)
-          ctx.fillStyle = rgba([255, 255, 255], Math.min(0.85, heatT) * intensity)
+          ctx.fillStyle = rgba([255, 255, 255], Math.min(0.85, heatT) * intensity * present)
           ctx.fill()
         }
       }
@@ -453,20 +552,40 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
       )
       for (let i = 0; i < count; i++) neurons.push(new Neuron())
 
-      // brain shell coordinates
+      // Extra points that only appear once gathered. A brain needs a far denser
+      // surface than the field wants, and this keeps the two independent.
+      const shellCount = Math.round(count * 14)
+      for (let i = 0; i < shellCount; i++) {
+        const n = new Neuron()
+        n.shell = true
+        neurons.push(n)
+      }
+
+      // Brain coordinates are dealt out by a stride rather than in order, so
+      // the field neurons land across every region instead of piling into the
+      // cerebrum and leaving the lobes to appear out of nowhere.
+      const total = neurons.length
       neurons.forEach((n, i) => {
-        const [bx, by, bz] = brainPoint(i, count)
+        const [bx, by, bz, cx, cy, cz] = brainPoint((i * 7919) % total, total)
         n.bx = bx
         n.by = by
         n.bz = bz
+        const dx = bx - cx
+        const dy = by - cy
+        const dz = bz - cz
+        const len = Math.hypot(dx, dy, dz) || 1
+        n.nx = dx / len
+        n.ny = dy / len
+        n.nz = dz / len
       })
 
-      // synapses across the scattered field
+      // synapses across the scattered field, shell points excluded
       const seen = new Set<string>()
       neurons.forEach((n, i) => {
+        if (n.shell) return
         const near = neurons
           .map((o, j) => ({ o, j, d: Math.hypot(n.x - o.x, n.y - o.y) }))
-          .filter((c) => c.j !== i && c.d < connectionRadius)
+          .filter((c) => !c.o.shell && c.j !== i && c.d < connectionRadius)
           .sort((p, q) => p.d - q.d)
           .slice(0, maxSynapses)
 
@@ -481,16 +600,19 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
         }
       })
 
-      // connectome across the brain shell, so the gathered form is wired too
+      // Connectome across the brain, wired between the field neurons only. The
+      // shell is surface, not circuitry, and pairing all of it would turn this
+      // into a quadratic search over the better part of a thousand points.
       const seen3 = new Set<string>()
       neurons.forEach((n, i) => {
+        if (n.shell) return
         const near = neurons
           .map((o, j) => ({
             o,
             j,
             d: Math.hypot(n.bx - o.bx, n.by - o.by, n.bz - o.bz),
           }))
-          .filter((c) => c.j !== i && c.d < 0.42)
+          .filter((c) => !c.o.shell && c.j !== i && c.d < 0.42)
           .sort((p, q) => p.d - q.d)
           .slice(0, 3)
 
@@ -559,7 +681,7 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
       for (const e of list) {
         const base = Math.max(e.a.excite, e.b.excite)
         const depth = morph > 0.01 ? (e.a.depth + e.b.depth) / 2 : 1
-        const a = (0.055 + base * 0.18 + morph * 0.05) * intensity * visibility * Math.max(0.3, depth - 0.35)
+        const a = (0.055 + base * 0.18) * intensity * visibility * Math.max(0.1, (depth - 0.74) * 1.5)
         const { cx, cy } = control(e)
         ctx.beginPath()
         ctx.moveTo(e.a.px, e.a.py)
@@ -622,15 +744,21 @@ const InteractiveSynapseNetwork: React.FC<InteractiveSynapseNetworkProps> = ({
         morph = target
       }
 
-      if (morph > 0.02 && !calm) spin += 0.0045
+      if (morph > 0.02 && !calm) spin += 0.0022
+      spinCos = Math.cos(spin)
+      spinSin = Math.sin(spin)
+      brainScale = Math.min(width, height) * 0.3
 
-      ctx.fillStyle = `rgba(0,0,0,${trailOpacity})`
+      // The comet trail is what gives the scattered field its motion, but on a
+      // turning brain it just smears the surface, so it is wound back as the
+      // neurons gather.
+      ctx.fillStyle = `rgba(0,0,0,${trailOpacity + morph * (0.85 - trailOpacity)})`
       ctx.fillRect(0, 0, width, height)
 
       // positions first, so every edge is drawn against fresh coordinates
       for (const n of neurons) n.update(time)
 
-      const shown = easeInOut(morph)
+      shown = easeInOut(morph)
       drawEdges(edges, 1 - shown)
       drawEdges(brainEdges, shown)
 

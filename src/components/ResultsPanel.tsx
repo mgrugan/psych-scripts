@@ -37,14 +37,16 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({ result, onReset }) => {
         <div className="flex items-center gap-2">
           <a
             href={`${plot.png}?download=1`}
-            className="rounded-full border border-white/70 px-5 py-2 text-[10px] font-light tracking-[0.18em] text-white/85 uppercase transition-all duration-300 hover:border-white hover:text-white"
+            className="flex items-center gap-2 rounded-full border border-white/70 px-5 py-2 text-[10px] font-light tracking-[0.18em] text-white/85 uppercase transition-all duration-300 hover:border-white hover:text-white"
           >
+            <img src="/icons/download.png" alt="" aria-hidden="true" className="h-3 w-3 opacity-85" />
             Png
           </a>
           <a
             href={`${plot.pdf}?download=1`}
-            className="rounded-full border border-white/70 px-5 py-2 text-[10px] font-light tracking-[0.18em] text-white/85 uppercase transition-all duration-300 hover:border-white hover:text-white"
+            className="flex items-center gap-2 rounded-full border border-white/70 px-5 py-2 text-[10px] font-light tracking-[0.18em] text-white/85 uppercase transition-all duration-300 hover:border-white hover:text-white"
           >
+            <img src="/icons/download.png" alt="" aria-hidden="true" className="h-3 w-3 opacity-85" />
             Pdf
           </a>
           <a

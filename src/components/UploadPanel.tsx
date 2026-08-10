@@ -81,20 +81,7 @@ const UploadPanel: React.FC<UploadPanelProps> = ({ busy, onRun }) => {
         />
 
         <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-full border border-white/75 transition-transform duration-700 group-hover:scale-110">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="0.9"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-5 w-5 text-white/70"
-            aria-hidden="true"
-          >
-            <path d="M12 16V4" />
-            <path d="m7.5 8.5 4.5-4.5 4.5 4.5" />
-            <path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15" />
-          </svg>
+          <img src="/icons/upload.png" alt="" aria-hidden="true" className="h-5 w-5 opacity-90" />
         </div>
 
         {file ? (
